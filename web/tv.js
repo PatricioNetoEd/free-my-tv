@@ -209,7 +209,9 @@ var TV = (function () {
   var SAMPLE = [
     ['netflix', 'Netflix', '#E50914'], ['youtube.leanback.v4', 'YouTube', '#FF0033'], ['amazon', 'Prime Video', '#1A98FF'],
     ['com.disney.disneyplus-prod', 'Disney+', '#1838C8'], ['com.hbo.hbomax', 'Max', '#6C3BE0'],
-    ['com.apple.appletv', 'Apple TV', '#B8BCC6'], ['globoplaywebos', 'Globoplay', '#FF5A1F'], ['spotify-beehive', 'Spotify', '#1DB954'],
+    ['com.apple.appletv', 'Apple TV', '#B8BCC6'], ['globoplaywebos', 'Globoplay', '#FF5A1F'],
+    ['br.com.claro.now', 'Claro tv+', '#E3262E'], ['com.discovery.discoveryplus', 'discovery+', '#2B57D0'],
+    ['spotify-beehive', 'Spotify', '#1DB954'],
     ['cdp-30', 'Plex', '#E5A00D'], ['com.crunchyroll.webapp', 'Crunchyroll', '#F47521'], ['com.webos.app.browser', 'Web Browser', '#3A7BD5'],
     ['com.palm.app.settings', 'Settings', '#8E8E93']
   ];
