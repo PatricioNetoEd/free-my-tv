@@ -83,7 +83,7 @@
     ['globoplay', /globoplay/, /globoplay/i, ['#FF8A1F', '#FF2D5A']],
     ['jellyfin', /jellyfin/i, /jellyfin/i, ['#AA5CC3', '#00A4DC']],
     ['spotify', /spotify/, /spotify/i, ['#1DB954', '#0F7A36']],
-    ['clarotv', /claro/, /claro ?tv/i, ['#1C1C1C', '#0B0B0B']],
+    ['clarotv', /claro\.now|clarotv|claro\.tv/, /claro ?tv/i, ['#1C1C1C', '#0B0B0B']],
     // Never a bare /discovery/: LG's own com.webos.app.discovery.
     ['discoveryplus', /discoveryplus/, /discovery\+|discoveryplus/i, ['#211E2A', '#09080D']]
   ];
