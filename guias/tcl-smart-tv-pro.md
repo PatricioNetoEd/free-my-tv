@@ -10,6 +10,8 @@ Como ler este guia:
 - **Cada comando vem marcado:**
   - *Só leitura*: não muda nada na TV (ou roda só no computador).
   - *Altera a TV: peça OK*: muda algo na TV. O assistente explica o que vai fazer e só roda depois do seu OK.
+  - *Altera o computador: peça OK*: não toca a TV, mas instala programas ou escreve arquivos no seu computador. O
+    assistente também só faz depois do seu OK.
 - O endereço da TV aparece como `<IP>`. Troque pelo IP da sua TV (Configurações → Rede e Internet → sua rede).
 - Nenhuma chave, senha ou número de série entra neste guia, no chat ou no git.
 
@@ -19,12 +21,14 @@ Quando você trocar para o Free My TV:
 
 - A **tela inicial** e o **protetor de tela** passam a ser os do Free My TV.
 - Uma **lista curta de apps de propaganda** é desligada (nunca desinstalada): na TCL, mensagens, conta TCL, demo de
-  loja, menu de hotel, manuais, espelhamento de tela e apps de log, além do Play Games e do YouTube Music. Com o
-  card 101 do Meu TV OS aplicado, a telemetria da TCL (`com.tcl.bi`) também entra nessa lista.
+  loja, menu de hotel, manuais, espelhamento de tela e apps de log, além do Play Games e do YouTube Music. Só se o
+  card 101 do Meu TV OS for aplicado (ele ainda está em análise), a telemetria da TCL (`com.tcl.bi`) também entra
+  nessa lista; sem ele, ela fica ligada.
 - A tela inicial da TCL/Google TV e o app de configuração inicial do Google também ficam desligados enquanto o
   Free My TV é a tela inicial.
 - O modo ***Original*** traz tudo de volta, exatamente como estava. Se a nova tela inicial travar 3 vezes em 5
-  minutos, a TV volta sozinha para o *Original*.
+  minutos, a tela inicial de fábrica volta sozinha; os apps desligados continuam desligados até você escolher
+  *Original* (ou fazer o resgate manual do passo 16).
 
 Nada de imagem, som, rede ou conta da TV é mudado.
 
@@ -42,7 +46,7 @@ adb version
 
 Instalar só o que faltar:
 
-*Só leitura* (não toca a TV; instala programas no computador, com o seu OK)
+*Altera o computador: peça OK* (não toca a TV; instala programas no computador)
 
 ```bash
 brew install --cask temurin android-commandlinetools android-platform-tools
@@ -54,7 +58,7 @@ sdkmanager "build-tools;34.0.0" "platforms;android-34"
 O primeiro `./build.sh` cria o arquivo `config.properties`. Ele fica só no seu computador: o git o ignora.
 Preencha assim:
 
-*Só leitura* (arquivo no computador)
+*Altera o computador: peça OK* (escreve no arquivo `config.properties`, no computador)
 
 ```properties
 latitude=-23.5505
@@ -256,7 +260,8 @@ adb shell pm enable com.tcl.ocean.instructions
 adb shell pm enable com.tcl.logkit
 ```
 
-Com o card 101 aplicado, também:
+Só se o card 101 do Meu TV OS tiver sido aplicado (ele ainda está em análise; sem ele, a troca não desliga
+`com.tcl.bi` e este comando não é necessário), também:
 
 *Altera a TV: peça OK*
 
@@ -285,6 +290,27 @@ adb shell settings put secure screensaver_components com.google.android.apps.tv.
 ```bash
 adb shell pm enable com.google.android.tungsten.setupwraith
 ```
+
+Ligar o `setupwraith` traz de volta mais uma candidata a tela inicial (a `RecoveryActivity` dele), e isso pode
+derrubar a tela inicial padrão. Por isso, logo depois, aplique de novo a tela inicial de fábrica:
+
+*Altera a TV: peça OK* (aplica de novo a tela inicial de fábrica)
+
+```bash
+adb shell cmd package set-home-activity com.google.android.apps.tv.launcherx/.home.HomeActivity
+```
+
+E confira quem abre com o Home:
+
+*Só leitura*
+
+```bash
+adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME
+```
+
+A resposta tem que ser `com.google.android.apps.tv.launcherx/.home.HomeActivity`. Só então reinicie a TV ou aperte
+Home. (No Android 12 e mais novos também existe `cmd role get-role-holders android.app.role.HOME`; nesta TV, com
+Android 11, esse comando não existe.)
 
 Antes da troca, `pm list packages -d` desta TV listava só `au.com.stan.and` e `tv.wuaki.apptv`: depois do resgate,
 deve voltar a ser essa lista.
