@@ -308,9 +308,22 @@ E confira quem abre com o Home:
 adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME
 ```
 
-A resposta tem que ser `com.google.android.apps.tv.launcherx/.home.HomeActivity`. Só então reinicie a TV ou aperte
+No Android 11 a resposta vem em duas linhas: primeiro uma com `priority=... isDefault=...`, depois o componente. A
+última linha tem que ser `com.google.android.apps.tv.launcherx/.home.HomeActivity`. Só então reinicie a TV ou aperte
 Home. (No Android 12 e mais novos também existe `cmd role get-role-holders android.app.role.HOME`; nesta TV, com
 Android 11, esse comando não existe.)
+
+Se a última linha for outra coisa (por exemplo `RecoveryActivity` ou `ResolverActivity`), **não reinicie a TV**.
+Repita o `set-home-activity` acima (*Altera a TV: peça OK*) e confira de novo. Se ainda assim não for o launcherx,
+desligue o `setupwraith` de novo, para ele não tomar o Home:
+
+*Altera a TV: peça OK* (desliga de novo o app de configuração do Google TV)
+
+```bash
+adb shell pm disable-user --user 0 com.google.android.tungsten.setupwraith
+```
+
+e peça ajuda antes de reiniciar: o `setupwraith` só pode ficar ligado com a tela inicial de fábrica garantida.
 
 Antes da troca, `pm list packages -d` desta TV listava só `au.com.stan.and` e `tv.wuaki.apptv`: depois do resgate,
 deve voltar a ser essa lista.
