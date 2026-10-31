@@ -154,6 +154,12 @@ final class HomeMode {
         "com.tcl.settings", "com.tcl.common.shortcutmenu", "com.tcl.inputmethod.international", "com.tcl.android.webview",
         "com.tcl.wifi.resources.overlay", "com.tcl.partnercustomizer", "com.tcl.tv.tclhome_passive",
         "com.tcl.keycustomfunctionservice",                                           // remote keys; a fallback home too
+        // TCL Smart TV Pro (BeyondTV4, Realtek RTD2880, Android 11)
+        "com.tcl.versionUpdateApp",                                                   // system and TCL app updates
+        "com.tcl.xian.StartandroidService",                                           // device authentication
+        "com.tcl.MultiScreenInteraction_TV",                                          // T-Cast remote and keyboard
+        "com.tcl.ui_mediaCenter",                                                     // USB, DLNA and PVR player
+        "com.tcl.assistant",                                                          // voice key and mic LED
         // Hotack X1BR projector (LuminaOS, Android 14): its home, settings, Wi-Fi, Bluetooth and keystone in one (#342)
         "com.htc.luminaos",
         "com.tcl.channelplus",                                                        // the channel source TCL's Live TV tunes (off: black screen)
