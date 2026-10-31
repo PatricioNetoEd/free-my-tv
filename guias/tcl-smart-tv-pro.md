@@ -21,9 +21,8 @@ Quando você trocar para o Free My TV:
 
 - A **tela inicial** e o **protetor de tela** passam a ser os do Free My TV.
 - Uma **lista curta de apps de propaganda** é desligada (nunca desinstalada): na TCL, mensagens, conta TCL, demo de
-  loja, menu de hotel, manuais, espelhamento de tela e apps de log, além do Play Games e do YouTube Music. Só se o
-  card 101 do Meu TV OS for aplicado (ele ainda está em análise), a telemetria da TCL (`com.tcl.bi`) também entra
-  nessa lista; sem ele, ela fica ligada.
+  loja, menu de hotel, manuais, espelhamento de tela e apps de log, além do Play Games e do YouTube Music. A
+  telemetria da TCL (`com.tcl.bi`) fica ligada: a TV ao vivo (`com.tcl.tv`) usa os dados dela (card 101, descartado).
 - A tela inicial da TCL/Google TV e o app de configuração inicial do Google também ficam desligados enquanto o
   Free My TV é a tela inicial.
 - O modo ***Original*** traz tudo de volta, exatamente como estava. Se a nova tela inicial travar 3 vezes em 5
@@ -258,15 +257,6 @@ adb shell pm enable com.tcl.hotelmenu
 adb shell pm enable com.tcl.repairguide
 adb shell pm enable com.tcl.ocean.instructions
 adb shell pm enable com.tcl.logkit
-```
-
-Só se o card 101 do Meu TV OS tiver sido aplicado (ele ainda está em análise; sem ele, a troca não desliga
-`com.tcl.bi` e este comando não é necessário), também:
-
-*Altera a TV: peça OK*
-
-```bash
-adb shell pm enable com.tcl.bi
 ```
 
 Se uma versão antiga do Free My TV tiver desligado a fonte de canais da TV ao vivo e o TCL Channel:
