@@ -83,9 +83,16 @@ final class Symbols {
             if (sizes == null) SIZED.put(name, sizes = new Bitmap[SIZES]);
             for (Bitmap s : sizes) if (s != null && s.getWidth() == w && s.getHeight() == h) return;
             Bitmap s = b;
-            while (s.getWidth() / 2 >= w && s.getHeight() / 2 >= h) s = Bitmap.createScaledBitmap(s, s.getWidth() / 2, s.getHeight() / 2, true);
+            while (s.getWidth() / 2 >= w && s.getHeight() / 2 >= h) {
+                Bitmap half = Bitmap.createScaledBitmap(s, s.getWidth() / 2, s.getHeight() / 2, true);
+                if (s != b) s.recycle();
+                s = half;
+            }
+            Bitmap gone = sizes[SIZES - 1];   // the oldest size goes now, not at the next GC (native pixels)
             System.arraycopy(sizes, 0, sizes, 1, SIZES - 1);
             sizes[0] = Bitmap.createScaledBitmap(s, w, h, true);
+            if (s != b && s != sizes[0]) s.recycle();   // the last halving step
+            if (gone != null) gone.recycle();
         }
     }
 

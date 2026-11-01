@@ -259,6 +259,22 @@ final class Prefs {
 
     static void setTheme(String v) { put("theme", v); }
 
+    /**
+     * The home screen's look (Home Settings > Appearance): "classic" (the default, the screen as it always was) or
+     * "new" (Nova: design 200's safe area, top bar and type scale). HomeView applies it when the home screen shows.
+     */
+    static boolean lookNew() { return "new".equals(sp().getString("look", "classic")); }
+    static void setLookNew(boolean on) {
+        put("look", on ? "new" : "classic");
+        lookChanges++;
+    }
+
+    /**
+     * How many of `version`'s bumps were the look: when they all were, the home screen lays itself out again in place
+     * (HomeActivity) instead of starting over with a second HomeView beside the first until the GC frees it.
+     */
+    static int lookChanges;
+
     /** Wi-Fi/Ethernet, Bluetooth and USB icons at the top-left of the home screen. */
     static boolean statusIcons() { return sp().getBoolean("statusicons", false); }
     static void setStatusIcons(boolean on) { put("statusicons", on); }

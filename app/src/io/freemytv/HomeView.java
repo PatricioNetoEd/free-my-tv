@@ -82,10 +82,7 @@ import java.util.function.Consumer;
  * redraws what changed.
  */
 final class HomeView extends ViewGroup implements Choreographer.FrameCallback, HomeData.Listener, Recs.Listener {
-    // tvOS grid (Human Interface Guidelines): content inside the safe area, 80 px from the sides and 60 from top and
-    // bottom; 40 px between items; 7 columns of 217 px (the apps). The shelf glass extends 36 px past the tiles (the
-    // same padding on all four sides) and the tile corners are concentric with it (glass radius = radius + padding).
-    private static final float MARGIN = 80, CONTENT_R = 1840;
+    // The content's edges, the top's places and the text sizes of each look (Home Settings > Appearance): HomeLayout.
     // Hero, anchored at the bottom (a two-line title grows upward).
     private static final float HERO_TITLE_W = 900;
     // Shelf: tiles with corners concentric with the glass (glass radius = tile radius + padding).
@@ -115,9 +112,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final ExecutorService LOADER = Executors.newSingleThreadExecutor();
     // Light design (the L_ constants): title, tab bar, three recommendation cards and the shelf.
     // The tab bar is a 68 px capsule; the cards sit on the 5-column grid (the wide one spans 3).
-    private static final float L_TITLE_BASE = 130, L_TABBAR_TOP = 158, L_TABBAR_H = 68, L_CARDS_TOP = 262, L_CARD_H = 442;
+    private static final float L_CARDS_TOP = 262, L_CARD_H = 442;
     private static final float WATCH_GAP = 40;
-    private static final float L_TALL_W = 320, L_CARD_GAP = 40, L_BUTTON = 68, L_BUTTON_GAP = 20, L_BUTTON_CY = 103;
+    private static final float L_TALL_W = 320, L_CARD_GAP = 40;
     private static final float L_STATUS = 25, L_STATUS_GAP = 22;
     private static final String[] STATUS_SYMBOLS = {"wifi", "ethernet", "bluetooth", "usb"};
     private static final float L_PLATTER_TOP = 814, L_TILE_H = 126;
@@ -237,6 +234,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Spring[] tileFocus = new Spring[0];
     private RectF[] tileRects = new RectF[0];
     private final Map<String, Bitmap> crispLogos = new HashMap<>();   // logos already sized for the focused tile
+    /** The ones of those made here (Ui.downscale's copies), not the app's own logo when it was already the size. */
+    private final Set<Bitmap> crispMade = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     /** Each app's tile like its Apple TV icon: brand colors (top, bottom) and logo (0 = as is, 1 = white, 2 = dark). */
     private static final Map<String, int[]> TILE_STYLE = new HashMap<>();
     static {
@@ -326,6 +325,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private int w, h;
     private float k = 1;
     private String clockText = "", dateText = "", weatherLine = "";
+    /** The look's measures (Home Settings > Appearance), picked when laying out (onSizeChanged, resume), never in onDraw. */
+    private HomeLayout lay = HomeLayout.CLASSIC;
+    /** Nova's top-bar clock, and its width (measured when the minute changes, never while drawing). */
+    private Paint barClock;
+    private float barClockWidth;
     /** "Off in 42 min" next to the round buttons while the sleep timer runs (Settings > Sleep Timer); "" otherwise. */
     private String sleepText = "";
     private long weatherLineAt = -1;
@@ -684,6 +688,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     void resume() {
         if (running) return;
         running = true;
+        // Home Settings changed the look (HomeActivity keeps this view for that): laid out again here, once. Before the
+        // first layout (w == 0) onSizeChanged does it.
+        if (w > 0 && look() != lay) layoutAll();
         checkNight(false);
         boolean h24 = Ui.h24();
         if (h24 != clock24) {   // 12/24 hours changed (the TV's or the Clock row's): the clock and the drawer's times again
@@ -758,6 +765,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         click.release();
         watchArt.close();   // its thread is shared: nothing is left running for this view
+        releaseSized();     // a new HomeView follows (new settings): this one's bitmaps go now, not at the next GC
     }
 
     /**
@@ -887,12 +895,45 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         screen.set(0, 0, w, h);
         scene.setSize(w, h);
         watchArt.setScale(k);
+        layoutAll();
+    }
+
+    /** layoutAll ran once: from then on it frees what the previous layout made. */
+    private boolean laidOut;
+
+    /** The bitmaps this view made at the current layout's sizes (made again as they're drawn). Returns how many. */
+    private int releaseSized() {
+        return releaseLogos() + shadows.release() + weatherSnapshot.release() + quotesSnapshot.release();
+    }
+
+    private static HomeLayout look() {
+        return Prefs.lookNew() ? HomeLayout.NOVA : HomeLayout.CLASSIC;
+    }
+
+    /**
+     * Everything measured for this size and look: at a new size (onSizeChanged), and when the look changed in Home
+     * Settings (resume; HomeActivity keeps this view then, instead of making a second one).
+     */
+    private void layoutAll() {
+        HomeLayout was = lay;
+        lay = look();
+        boolean newLook = laidOut && was != lay;
+        if (laidOut) {
+            // What was sized for the old layout goes before the new one is made: on Android 8+ a bitmap's pixels are
+            // native memory, freed only when the GC gets to it, so the two looks' copies would stay side by side.
+            int freed = releaseSized();
+            if (newLook) AppLog.w("home: look " + (lay.nova ? "nova" : "classic") + ", " + freed + " bitmaps released");
+        }
+        laidOut = true;
+        quotes = null;
+        watchTitles = null;
         makePaints();
+        if (newLook) fitPlaying();   // what's playing, cut at the new text size
         gridLabels = null;
         clockMinute = -1;
         updateClock();
         Symbols.warm(getContext(), "bell", 26 * k);
-        Symbols.warm(getContext(), "bedtime", 21 * k);   // the sleep timer's "Off in", at lQuote's size
+        Symbols.warm(getContext(), "bedtime", lay.text(21) * k);   // the sleep timer's "Off in", at lQuote's size
         layoutShelf();
         layoutStatus();
         layoutDrawer();
@@ -907,68 +948,69 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void makePaints() {
-        labelPaint = Ui.text(Ui.medium, 25 * k, 0xC7FFFFFF);
+        labelPaint = Ui.text(Ui.medium, lay.text(25) * k, 0xC7FFFFFF);
         labelPaint.setLetterSpacing(0.1f);
-        titlePaint = new TextPaint(Ui.text(Ui.displayMedium, 76 * k, 0xFFFFFFFF));
+        titlePaint = new TextPaint(Ui.text(Ui.displayMedium, lay.text(76) * k, 0xFFFFFFFF));
         titlePaint.setLetterSpacing(0.005f);
-        metaPaint = Ui.text(Ui.medium, 29 * k, 0xD1FFFFFF);
+        metaPaint = Ui.text(Ui.medium, lay.text(29) * k, 0xD1FFFFFF);
         metaPaint.setLetterSpacing(0.014f);
-        clockPaint = Ui.numbers(Ui.thin, 176 * k, 0xFFFFFFFF);
+        clockPaint = Ui.numbers(Ui.thin, lay.text(176) * k, 0xFFFFFFFF);
         clockPaint.setLetterSpacing(-0.01f);
         for (Paint p : new Paint[] {labelPaint, titlePaint, metaPaint, clockPaint}) p.setShadowLayer(22 * k, 0, 2 * k, 0x59000000);
-        lTitle = Ui.text(Ui.displaySemibold, 76 * k, L_INK);
+        lTitle = Ui.text(Ui.displaySemibold, lay.titleSize * k, L_INK);
         lTitle.setLetterSpacing(0.004f);
-        lTab = Ui.text(Ui.medium, 30 * k, L_DIM);
-        lTabOn = Ui.text(Ui.semibold, 30 * k, L_INK);
-        lCardTitle = Ui.text(Ui.semibold, 31 * k, L_INK);
+        lTab = Ui.text(Ui.medium, lay.tabSize * k, L_DIM);
+        lTabOn = Ui.text(Ui.semibold, lay.tabSize * k, L_INK);
+        lCardTitle = Ui.text(Ui.semibold, lay.text(31) * k, L_INK);
         lCardTitle.setLetterSpacing(0.012f);
-        lCardMeta = Ui.text(Ui.medium, 25 * k, L_DIM);
-        lQuote = Ui.numbers(Ui.regular, 21 * k, L_FAINT);
-        lTip = Ui.text(Ui.semibold, 25 * k, L_INK);
+        lCardMeta = Ui.text(Ui.medium, lay.text(25) * k, L_DIM);
+        lQuote = Ui.numbers(Ui.regular, lay.text(21) * k, L_FAINT);
+        lTip = Ui.text(Ui.semibold, lay.tipSize * k, L_INK);
         lTip.setTextAlign(Paint.Align.CENTER);
-        lDate = Ui.text(Ui.semibold, 34 * k, L_DIM);
-        lClock = Ui.numbers(Ui.light, 200 * k, L_INK);
+        lDate = Ui.text(Ui.semibold, lay.text(34) * k, L_DIM);
+        lClock = Ui.numbers(Ui.light, lay.text(200) * k, L_INK);
         lClock.setLetterSpacing(-0.01f);
-        lWeather = Ui.text(Ui.medium, 34 * k, L_DIM);
-        lClockQuote = Ui.numbers(Ui.medium, 28 * k, L_DIM);
+        barClock = lay.nova ? Ui.numbers(Ui.semibold, lay.barClockSize * k, L_INK) : null;
+        lWeather = Ui.text(Ui.medium, lay.text(34) * k, L_DIM);
+        lClockQuote = Ui.numbers(Ui.medium, lay.text(28) * k, L_DIM);
         lightGradient = tintShade = null;
-        buttonPaint = Ui.text(Ui.semibold, 29 * k, INK);
-        capsuleText = Ui.numbers(Ui.medium, 29 * k, 0xF2FFFFFF);
-        tipPaint = Ui.text(Ui.semibold, 25 * k, 0xF2FFFFFF);
+        buttonPaint = Ui.text(Ui.semibold, lay.text(29) * k, INK);
+        capsuleText = Ui.numbers(Ui.medium, lay.text(29) * k, 0xF2FFFFFF);
+        tipPaint = Ui.text(Ui.semibold, lay.text(25) * k, 0xF2FFFFFF);
         tipPaint.setTextAlign(Paint.Align.CENTER);
         tipPaint.setShadowLayer(16 * k, 0, 1 * k, 0x99000000);
         // Quotes: a subtle detail, smaller and dimmer than the rest.
-        quotePaint = Ui.numbers(Ui.regular, 21 * k, 0xB8FFFFFF);
+        quotePaint = Ui.numbers(Ui.regular, lay.text(21) * k, 0xB8FFFFFF);
         quotePaint.setShadowLayer(14 * k, 0, 1 * k, 0x99000000);
-        staleQuote = Ui.text(Ui.medium, 21 * k, 0x99FFFFFF);
+        staleQuote = Ui.text(Ui.medium, lay.text(21) * k, 0x99FFFFFF);
         staleQuote.setTextAlign(Paint.Align.RIGHT);
-        rowTitle = Ui.text(Ui.semibold, 25 * k, 0xB3FFFFFF);
-        drawerLabel = Ui.text(Ui.medium, 23 * k, 0xEBFFFFFF);
+        rowTitle = Ui.text(Ui.semibold, lay.text(25) * k, 0xB3FFFFFF);
+        drawerLabel = Ui.text(Ui.medium, lay.text(23) * k, 0xEBFFFFFF);
         drawerLabel.setTextAlign(Paint.Align.CENTER);
-        cardTitle = Ui.text(Ui.semibold, 25 * k, 0xB3FFFFFF);
-        cardText = Ui.text(Ui.medium, 29 * k, 0xF2FFFFFF);
-        cardDim = Ui.numbers(Ui.medium, 23 * k, 0xADFFFFFF);
-        cardDimRight = Ui.text(Ui.medium, 21 * k, 0x99FFFFFF);
+        cardTitle = Ui.text(Ui.semibold, lay.text(25) * k, 0xB3FFFFFF);
+        cardText = Ui.text(Ui.medium, lay.text(29) * k, 0xF2FFFFFF);
+        cardDim = Ui.numbers(Ui.medium, lay.text(23) * k, 0xADFFFFFF);
+        cardDimRight = Ui.text(Ui.medium, lay.text(21) * k, 0x99FFFFFF);
         cardDimRight.setTextAlign(Paint.Align.RIGHT);
-        bigTemp = Ui.numbers(Ui.light, 100 * k, 0xFFFFFFFF);
-        hourPaint = Ui.numbers(Ui.medium, 22 * k, 0xADFFFFFF);
+        bigTemp = Ui.numbers(Ui.light, lay.text(100) * k, 0xFFFFFFFF);
+        hourPaint = Ui.numbers(Ui.medium, lay.text(22) * k, 0xADFFFFFF);
         hourPaint.setTextAlign(Paint.Align.CENTER);
-        hourTemp = Ui.numbers(Ui.medium, 26 * k, 0xF2FFFFFF);
+        hourTemp = Ui.numbers(Ui.medium, lay.text(26) * k, 0xF2FFFFFF);
         hourTemp.setTextAlign(Paint.Align.CENTER);
-        dayLow = Ui.numbers(Ui.medium, 22 * k, 0xADFFFFFF);
+        dayLow = Ui.numbers(Ui.medium, lay.text(22) * k, 0xADFFFFFF);
         dayLow.setTextAlign(Paint.Align.CENTER);
-        pricePaint = Ui.numbers(Ui.medium, 26 * k, 0xF2FFFFFF);
+        pricePaint = Ui.numbers(Ui.medium, lay.text(26) * k, 0xF2FFFFFF);
         pricePaint.setTextAlign(Paint.Align.RIGHT);
-        changePaint = Ui.numbers(Ui.semibold, 21 * k, 0xFFFFFFFF);
+        changePaint = Ui.numbers(Ui.semibold, lay.text(21) * k, 0xFFFFFFFF);
         changePaint.setTextAlign(Paint.Align.CENTER);
-        sheetTitle = Ui.text(Ui.displaySemibold, 40 * k, 0xFFFFFFFF);
+        sheetTitle = Ui.text(Ui.displaySemibold, lay.text(40) * k, 0xFFFFFFFF);
         sheetTitle.setTextAlign(Paint.Align.CENTER);
-        gridLabel = new TextPaint(Ui.text(Ui.medium, 24 * k, 0x99FFFFFF));
+        gridLabel = new TextPaint(Ui.text(Ui.medium, lay.text(24) * k, 0x99FFFFFF));
         gridLabel.setTextAlign(Paint.Align.CENTER);
-        toastPaint = new TextPaint(Ui.text(Ui.medium, 26 * k, 0xF2FFFFFF));
-        menuTitlePaint = Ui.text(Ui.semibold, 34 * k, L_INK);
-        menuSubPaint = Ui.text(Ui.medium, 25 * k, L_DIM);
-        menuOptionPaint = Ui.text(Ui.medium, 30 * k, L_INK);
+        toastPaint = new TextPaint(Ui.text(Ui.medium, lay.text(26) * k, 0xF2FFFFFF));
+        menuTitlePaint = Ui.text(Ui.semibold, lay.text(34) * k, L_INK);
+        menuSubPaint = Ui.text(Ui.medium, lay.text(25) * k, L_DIM);
+        menuOptionPaint = Ui.text(Ui.medium, lay.text(30) * k, L_INK);
         if (menuOpen) layoutMenu();
         shadow.setMaskFilter(new BlurMaskFilter(SHADOW_BLUR * k, BlurMaskFilter.Blur.NORMAL));
         shadowSoft.setMaskFilter(new BlurMaskFilter(12 * k, BlurMaskFilter.Blur.NORMAL));
@@ -1043,6 +1085,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         drawerWasMoving = drawerMoving;
         tilesDirty = statusDirty = heroDirty = drawerDirty = gridDirty = motionDirty = false;
         if (updateClock()) {
+            if (lay.nova) layoutButtons();   // the top bar's clock may have changed width
             layoutStatus();
             status.invalidate();
             if (hero != null && hero.clock) {
@@ -1162,6 +1205,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         clockMinute = minute;
         clockText = Ui.clock(now);
         dateText = Ui.date(now);
+        if (barClock != null) barClockWidth = barClock.measureText(clockText);
         return true;
     }
 
@@ -1420,7 +1464,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void applyWatchContrast() {
         int card = blend(tintFrom, tintTo, Ui.clamp(tintMix.value));
         int behind = plainAt((L_CARDS_TOP + WatchArt.H + 70) * k / Math.max(1, h), card);
-        int quoteBg = plainAt((L_TABBAR_TOP + L_TABBAR_H / 2) * k / Math.max(1, h), card);
+        int quoteBg = plainAt(lay.quoteRowCy * k / Math.max(1, h), card);
         int title = lCardTitle.getColor(), meta = lCardMeta.getColor(), quote = lQuote.getColor();
         if (!watchColorsReady || behind != watchTextBg || quoteBg != watchQuoteBg
                 || title != watchTitleInk || meta != watchMetaInk || quote != watchQuoteInk) {
@@ -1575,7 +1619,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         capsuleInfoW = info;
         float buttons = n * b + Math.max(0, n - 1) * gap;
-        float right = CONTENT_R * k, top = CAPSULE_TOP * k;
+        float right = lay.contentR * k, top = CAPSULE_TOP * k;
         float left = right - pad - buttons - (info > 0 ? info + 12 * k : pad);
         capsuleRect.set(left, top, right, top + CAPSULE_H * k);
         float x = right - pad - buttons, cy = capsuleRect.centerY();
@@ -1615,7 +1659,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void layoutShelf() {
         int n = Math.min(shelf.size(), shelfVisible);
         float pad = SHELF_PAD * k, gap = TILE_GAP * k;
-        float full = (CONTENT_R - MARGIN) * k;
+        float full = (lay.contentR - lay.margin - 2 * lay.shelfInset) * k;
         // Tiles in the TV banners' own 16:9, so an app's art is never stretched; never taller than L_TILE_H. The glass
         // keeps its bottom edge, so with more apps it only gets lower.
         float tw = Math.min(L_TILE_H * 16f / 9 * k, (full - Math.max(0, n - 1) * gap) / Math.max(1, n));
@@ -1631,7 +1675,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             snap(tileRects[i]);
             x += tw + gap;
         }
+        releaseLogos();
+    }
+
+    /**
+     * The logos sized for the previous tiles go now, not at the next GC (on Android 8+ their pixels are native memory,
+     * and a look change or a new shelf would otherwise hold both sets). A logo already at its size is the app's own
+     * (HomeApps keeps it for every screen): only the copies made here are freed. Returns how many.
+     */
+    private int releaseLogos() {
+        int n = crispMade.size();
+        for (Bitmap b : crispMade) b.recycle();
+        crispMade.clear();
         crispLogos.clear();
+        return n;
     }
 
     /** Scrolls the shelf, one app at a time, so the focused app is shown: the tiles slide there (unless `snap`). */
@@ -1760,14 +1817,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         playingTabCap = Ui.cap(lQuote);
         playingClockCap = Ui.cap(lClockQuote);
         fitPaint.set(lClockQuote);
-        playingClock = TextUtils.ellipsize(now, fitPaint, (CONTENT_R - MARGIN - 60) * k, TextUtils.TruncateAt.END).toString();
+        playingClock = TextUtils.ellipsize(now, fitPaint, (lay.contentR - lay.margin - 60) * k, TextUtils.TruncateAt.END).toString();
     }
 
     /** Coin logo + price in the configured currency, in a row at the right end of the tab bar. */
     private void drawQuotes(Canvas c) {
         boolean clock = clockMode();
         // At the right margin, under the round buttons: the shelf's glass is narrower and centred with few apps.
-        float right = CONTENT_R * k;
+        float right = lay.contentR * k;
         applyTone();
         Paint text = clock ? lClockQuote : lQuote;
         // The corner buttons' names appear in this row: the quotes fade out while one of them has focus.
@@ -1780,8 +1837,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         String line = clock ? playingClock : playingTab;
         if (line != null) {
             float cap = clock ? playingClockCap : playingTabCap, gap = cap * 0.6f;
-            float base = clock ? L_QUOTES_BASE * k : (L_TABBAR_TOP + L_TABBAR_H / 2) * k + cap / 2;
-            float x = clock ? MARGIN * k : right - playingTabWidth - gap - NowPlaying.barsWidth(cap);
+            float base = clock ? L_QUOTES_BASE * k : lay.quoteRowCy * k + cap / 2;
+            float x = clock ? lay.margin * k : right - playingTabWidth - gap - NowPlaying.barsWidth(cap);
             NowPlaying.drawBars(c, x, base, cap, text, SystemClock.uptimeMillis() < barsUntil, barRect);
             c.drawText(line, x + NowPlaying.barsWidth(cap) + gap, base, text);
             text.setColor(textColor);
@@ -1798,11 +1855,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             q = quotes = new Quotes(coins, data.prices, text);
         }
         // On the tab row, at the right.
-        float base = clock ? L_QUOTES_BASE * k : (L_TABBAR_TOP + L_TABBAR_H / 2) * k + q.halfCap;
+        float base = clock ? L_QUOTES_BASE * k : lay.quoteRowCy * k + q.halfCap;
         float cap = q.cap, gap = (clock ? 8 : 6) * k, spacing = (clock ? 32 : 24) * k;
         float total = spacing * (n - 1);
         for (int i = 0; i < n; i++) total += q.glyphs[i] + gap + q.widths[i];
-        float x = clock ? MARGIN * k : right - total;
+        float x = clock ? lay.margin * k : right - total;
         int coinColor = clock ? text.getColor() : Ui.alpha(tone(0xB38E8E93, 0x8CFFFFFF), fade);
         for (int i = 0; i < n; i++) {
             Glyphs.coin(getContext(), c, HomeData.COINS[coins[i]], x + q.glyphs[i] / 2, base - cap / 2, cap, coinColor);
@@ -2001,6 +2058,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (rest) scale /= 1 + FOCUS_GROW;
         Bitmap out = Ui.downscale(src, Math.round(lw * scale), Math.round(lh * scale));
         crispLogos.put(key, out);
+        if (out != src) crispMade.add(out);
         return out;
     }
 
@@ -2041,7 +2099,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void layoutDrawer() {
         int n = drawerItems.size();
-        float left = MARGIN * k, right = CONTENT_R * k;
+        float left = lay.margin * k, right = lay.contentR * k;
         float gap = 18 * k, groupGap = 56 * k;
         int groups = Math.max(1, (drawerInputs > 0 ? 1 : 0) + (drawerHome > drawerInputs ? 1 : 0) + (n > drawerHome ? 1 : 0));
         float tw = Math.min(230 * k, (right - left - Math.max(0, n - groups) * gap - (groups - 1) * groupGap) / Math.max(1, n));
@@ -2202,14 +2260,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         int ink = blend(tone(off ? 0xFF8E8E93 : L_INK, off ? 0x6BFFFFFF : 0xF2FFFFFF), INK, f);
         Symbols.draw(getContext(), c, it.symbol, cx, cell.top + cell.height() * 0.4f, 34 * k * s, ink);
         drawerLabel.setColor(ink);
-        drawerLabel.setTextSize(23 * k * s);
+        drawerLabel.setTextSize(lay.text(23) * k * s);
         float room = cell.width() - 16 * k, wide = drawerLabel.measureText(it.label);
         // A long name ("Home Settings", an input you renamed) shrinks a little before it gets cut.
-        if (wide > room) drawerLabel.setTextSize(Math.max(18 * k * s, 23 * k * s * room / wide));
+        if (wide > room) drawerLabel.setTextSize(Math.max(lay.text(18) * k * s, lay.text(23) * k * s * room / wide));
         fitPaint.set(drawerLabel);
         String label = TextUtils.ellipsize(it.label, fitPaint, room, TextUtils.TruncateAt.END).toString();
         c.drawText(label, cx, cell.top + cell.height() * 0.8f, drawerLabel);
-        drawerLabel.setTextSize(23 * k);
+        drawerLabel.setTextSize(lay.text(23) * k);
     }
 
     /** Weather for your location: now (large), the next 6 hours or 5 days, and sunrise and sunset. */
@@ -2336,8 +2394,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             int left = Math.round(r.left), top = Math.round(r.top);
             int w = Math.max(1, Math.round(r.right) - left), h = Math.max(1, Math.round(r.bottom) - top);
             if (bitmap == null || bitmap.getWidth() != w || bitmap.getHeight() != h) {
+                release();   // the card's old size (another look or screen size) goes now, not at the next GC
                 bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-                this.key = "";
             }
             if (!key.equals(this.key)) {
                 bitmap.eraseColor(0);
@@ -2347,6 +2405,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 this.key = key;
             }
             c.drawBitmap(bitmap, left, top, null);
+        }
+
+        /** Frees the bitmap (drawn again from scratch next time); 1 if there was one. */
+        int release() {
+            key = "";
+            if (bitmap == null) return 0;
+            bitmap.recycle();
+            bitmap = null;
+            return 1;
         }
     }
 
@@ -2601,7 +2668,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float tw = toast.getWidth() + iconW + 16 * k, th = toast.getHeight();
         float toastTop = 64 * k - (1 - a) * 16 * k;
         // Centered, unless that covers the title (a long one, such as Continue Watching): then just right of it.
-        float left = Math.max((w - tw) / 2f - padX, Math.min(titleRight + 40 * k, w - tw - 2 * padX - MARGIN * k));
+        float left = Math.max((w - tw) / 2f - padX, Math.min(titleRight + 40 * k, w - tw - 2 * padX - lay.margin * k));
         tmp.set(left, toastTop, left + tw + 2 * padX, toastTop + th + 2 * padY);
         int save = c.saveLayerAlpha(tmp.left - 4, tmp.top - 4, tmp.right + 4, tmp.bottom + 4, Math.round(255 * a));
         scene.glass(c, tmp, Math.min(tmp.height() / 2, 32 * k), SMOKE, 0.55f, 0, 0, 0.02f, 1);
@@ -3965,23 +4032,19 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void layoutLight() {
         if (lTab == null) return;
         // Text tabs; the focus pill extends 26 px past the text (the first tab's text starts at the margin).
-        float pad = 26 * k, tabTop = L_TABBAR_TOP * k, tabBottom = (L_TABBAR_TOP + L_TABBAR_H) * k;
-        float x = MARGIN * k - pad;
+        float pad = lay.tabPad * k, tabTop = lay.tabTop * k, tabBottom = (lay.tabTop + lay.tabH) * k;
+        float x = lay.margin * k - lay.tabOut * k;
         for (int i = 0; i < 3; i++) {
             float tw = Math.max(lTabOn.measureText(tabs()[i]), lTab.measureText(tabs()[i]));
             topRects[i].set(x, tabTop, x + tw + 2 * pad, tabBottom);
             snap(topRects[i]);
-            x = topRects[i].right + 4 * k;
+            x = topRects[i].right + lay.tabGap * k;
         }
-        float b = L_BUTTON * k, right = CONTENT_R * k, cy = L_BUTTON_CY * k;
-        for (int i = lightButtons.size() - 1; i >= 0; i--) {
-            topRects[3 + i].set(right - b, cy - b / 2, right, cy + b / 2);
-            right -= b + L_BUTTON_GAP * k;
-        }
-        float top = L_CARDS_TOP * k, ch = L_CARD_H * k, g = L_CARD_GAP * k, left = MARGIN * k, tall = L_TALL_W * k;
+        layoutButtons();
+        float top = L_CARDS_TOP * k, ch = L_CARD_H * k, g = L_CARD_GAP * k, left = lay.margin * k, tall = L_TALL_W * k;
         for (HomeApps.Item it : lightButtons) {
-            Symbols.warm(getContext(), it.symbol, 27 * k);
-            Symbols.warm(getContext(), it.symbol, 27 * k * 1.1f);
+            Symbols.warm(getContext(), it.symbol, lay.buttonSymbol * k);
+            Symbols.warm(getContext(), it.symbol, lay.buttonSymbol * k * 1.1f);
         }
         if (Prefs.statusIcons()) {   // at the sizes drawStatusIcon uses: drawing never scales a 150 px PNG down to 25
             for (String name : STATUS_SYMBOLS) {
@@ -3993,10 +4056,27 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         layoutCards();
     }
 
+    /**
+     * The round buttons, from the right: at the content's edge (Classic), or left of the top bar's clock (Nova), which
+     * moves them only when the clock's width changes.
+     */
+    private void layoutButtons() {
+        float b = lay.button * k, right = barButtonsRight(), cy = lay.buttonCy * k;
+        for (int i = lightButtons.size() - 1; i >= 0; i--) {
+            topRects[3 + i].set(right - b, cy - b / 2, right, cy + b / 2);
+            right -= b + lay.buttonGap * k;
+        }
+    }
+
+    private float barButtonsRight() {
+        if (!lay.nova || barClock == null) return lay.contentR * k;
+        return lay.contentR * k - barClockWidth - lay.barClockGap * k;
+    }
+
     /** The cards side by side: the one at cardIndex wide, the others tall, sliding as `cardOpen` moves. */
     private void layoutCards() {
         float top = L_CARDS_TOP * k, ch = L_CARD_H * k, g = L_CARD_GAP * k, tall = L_TALL_W * k;
-        float wide = (CONTENT_R - MARGIN) * k - 2 * tall - 2 * g, x = MARGIN * k - cardScroll.value * (tall + g);
+        float wide = (lay.contentR - lay.margin) * k - 2 * tall - 2 * g, x = lay.margin * k - cardScroll.value * (tall + g);
         for (int i = 0; i < Recs.MAX_CARDS; i++) {
             float w = Math.max(tall * 0.5f, tall + (wide - tall) * cardOpen[i].value);
             cardRects[i].set(x, top, x + w, top + ch);
@@ -4110,7 +4190,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Card i's place on screen (without its focus growth), scrolled with the row. */
     private void watchRect(int i, RectF out) {
         float step = (WatchArt.W + WATCH_GAP) * k;
-        float x = MARGIN * k + i * step - watchScroll.value * step, y = L_CARDS_TOP * k;
+        float x = lay.margin * k + i * step - watchScroll.value * step, y = L_CARDS_TOP * k;
         out.set(x, y, x + WatchArt.W * k, y + WatchArt.H * k);
     }
 
@@ -4145,7 +4225,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (!watchLoaded) return;   // not read yet: saying "nothing" now could be wrong
             String text = watchAllowed ? Ui.tr("Nothing half-watched in your apps.")
                     : Ui.tr("Missing permission: pick Continue Watching again in Home Settings.");
-            c.drawText(text, MARGIN * k, (L_CARDS_TOP + 60) * k, lCardMeta);
+            c.drawText(text, lay.margin * k, (L_CARDS_TOP + 60) * k, lCardMeta);
             return;
         }
         if (watchTitles == null || watchTextsK != k || watchTextsGen != Ui.generation) prepareWatchTexts();
@@ -4161,7 +4241,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private float watchLeftEdge() {
-        return (MARGIN - 32) * k;
+        return (lay.margin - 32) * k;
     }
 
     /** `ink`, or as much nearer black (light backgrounds) or white (dark ones) as it takes for 4.5:1 on `bg`. */
@@ -4607,8 +4687,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             return;
         }
         String hello = picksMode() ? Ui.tr("For You") : Ui.tr("Continue Watching");
-        c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
-        titleRight = MARGIN * k + lTitle.measureText(hello);
+        c.drawText(hello, lay.margin * k - Ui.leftBearing(lTitle, hello), lay.titleBase * k, lTitle);
+        // Nova: the title is under the top bar, and toasts (at the top) keep clear of the tabs instead.
+        titleRight = !lay.nova ? lay.margin * k + lTitle.measureText(hello) : picksMode() ? topRects[2].right : 0;
         if (!picksMode()) {
             if (continueMode()) drawWatchRow(c);
             if (HomeData.coinCount() > 0 || playingTab != null) drawQuotes(c);
@@ -4652,7 +4733,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void drawClock(Canvas c) {
-        float x = MARGIN * k;
+        float x = lay.margin * k;
         c.drawText(dateText, x - Ui.leftBearing(lDate, dateText), L_DATE_BASE * k, lDate);
         c.drawText(clockText, x - Ui.leftBearing(lClock, clockText), L_CLOCK_BASE * k, lClock);
         HomeData.Weather wx = data.weather;
@@ -4738,7 +4819,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             c.restore();
         }
         // The cards peeking in at the sides show only their image: their text would start off screen.
-        if (p == null || base.left < 0 || base.left > (CONTENT_R - 100) * k) return;
+        if (p == null || base.left < 0 || base.left > (lay.contentR - 100) * k) return;
         fitPaint.set(lCardTitle);
         c.drawText(TextUtils.ellipsize(p.title, fitPaint, bw, TextUtils.TruncateAt.END).toString(), base.left, base.bottom + 46 * k, lCardTitle);
         if (open > 0.02f && p.meta != null && !p.meta.isEmpty()) {
@@ -4766,6 +4847,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void drawLightButtons(Canvas c) {
         applyTone();
         drawStatusIcons(c);
+        if (barClock != null) {   // Nova: the clock at the top bar's right end (it takes no focus)
+            barClock.setColor(tone(L_INK, WHITE));
+            c.drawText(clockText, lay.contentR * k - barClockWidth, lay.buttonCy * k + Ui.halfCap(barClock), barClock);
+        }
         for (int slot = 0; slot < lightButtons.size(); slot++) {
             int i = slot;
             // The lifted button passes over its neighbors while they exchange places.
@@ -4796,32 +4881,49 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 fill.setColor(Ui.alpha(0xFFFFFFFF, f));
                 c.drawCircle(cell.centerX(), cell.centerY(), rad, fill);
             }
-            Symbols.draw(getContext(), c, it.symbol, cell.centerX(), cell.centerY(), 27 * k * s,
+            Symbols.draw(getContext(), c, it.symbol, cell.centerX(), cell.centerY(), lay.buttonSymbol * k * s,
                     blend(tone(L_INK, 0xEBFFFFFF), L_INK, f));
             if (f > 0.01f) {
                 String label = it.label;
                 float half = lTip.measureText(label) / 2;
-                float x = Math.min(r.centerX(), CONTENT_R * k - half);
+                float x = Math.min(r.centerX(), lay.contentR * k - half);
                 lTip.setAlpha(Math.round(255 * f));
-                c.drawText(label, x, r.bottom + (40 + 4 * f) * k, lTip);
+                c.drawText(label, x, r.bottom + (lay.tipDy + 4 * f) * k, lTip);
             }
             if (transform) c.restore();
         }
         if (sleepText.isEmpty()) return;
-        float right = (lightButtons.isEmpty() ? CONTENT_R * k : topRects[3].left) - 28 * k, cy = L_BUTTON_CY * k;
+        float right = sleepRight(), cy = lay.buttonCy * k;
         float tw = lQuote.measureText(sleepText), size = lQuote.getTextSize();
         c.drawText(sleepText, right - tw, cy + Ui.halfCap(lQuote), lQuote);
         Symbols.draw(getContext(), c, "bedtime", right - tw - size * 0.9f, cy, size, lQuote.getColor());
     }
 
-    /** Wi-Fi/Ethernet, Bluetooth (when something is connected) and a USB drive, at the top left. */
+    /** Where the sleep timer's "Off in" line ends: left of the round buttons. */
+    private float sleepRight() {
+        return (lightButtons.isEmpty() ? barButtonsRight() : topRects[3].left) - 28 * k;
+    }
+
+    /**
+     * Wi-Fi/Ethernet, Bluetooth (when something is connected) and a USB drive: at the top left (Classic), or in the top
+     * bar left of the buttons and the sleep timer's line (Nova, design 200 section 3).
+     */
     private void drawStatusIcons(Canvas c) {
         if (!Prefs.statusIcons()) return;
         float height = L_STATUS * k, gap = L_STATUS_GAP * k;
         int color = Ui.alpha(tone(L_INK, 0xEBFFFFFF), 0.85f);
-        float x = MARGIN * k;
-        // The top title ("For You", or "Continue Watching") is on this line too: the icons start after it, not on it.
-        if (!clockMode()) x += lTitle.measureText(picksMode() ? Ui.tr("For You") : Ui.tr("Continue Watching")) + gap;
+        float x = lay.margin * k;
+        if (lay.nova) {
+            float end = sleepRight();
+            if (!sleepText.isEmpty()) end -= lQuote.measureText(sleepText) + lQuote.getTextSize() * 1.4f;
+            if (network != 0) end -= statusWidth(network == 2 ? "ethernet" : "wifi", height) + gap;
+            if (bluetoothConnected) end -= statusWidth("bluetooth", height) + gap;
+            if (usbConnected) end -= statusWidth("usb", height) + gap;
+            x = end;
+        } else if (!clockMode()) {
+            // The top title ("For You", or "Continue Watching") is on this line too: the icons start after it, not on it.
+            x += lTitle.measureText(picksMode() ? Ui.tr("For You") : Ui.tr("Continue Watching")) + gap;
+        }
         if (network != 0) x = drawStatusIcon(c, network == 2 ? "ethernet" : "wifi", x, height, gap, color);
         if (bluetoothConnected) x = drawStatusIcon(c, "bluetooth", x, height, gap, color);
         if (usbConnected) drawStatusIcon(c, "usb", x, height, gap, color);
@@ -4834,11 +4936,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         return 1;
     }
 
+    private float statusWidth(String name, float height) {
+        return Symbols.width(getContext(), name, Symbols.pointSizeForHeight(getContext(), name, height * statusScale(name)));
+    }
+
     /** Draws a status icon left-aligned at `left`; returns where the next one starts. */
     private float drawStatusIcon(Canvas c, String name, float left, float height, float gap, int color) {
         float size = Symbols.pointSizeForHeight(getContext(), name, height * statusScale(name));
         float width = Symbols.width(getContext(), name, size);
-        Symbols.draw(getContext(), c, name, left + width / 2, L_BUTTON_CY * k, size, color);
+        Symbols.draw(getContext(), c, name, left + width / 2, lay.buttonCy * k, size, color);
         return left + width + gap;
     }
 

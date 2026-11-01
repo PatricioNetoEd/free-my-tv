@@ -68,6 +68,8 @@ var Prefs = (function () {
     language: function () { return pick('language', CONFIG.language || 'auto'); },
     temperature: function () { return pick('temperature', CONFIG.temperature || 'auto'); },
     theme: function () { return pick('theme', CONFIG.theme || 'auto'); },
+    /** The home screen's look (Home Settings → Appearance): 'classic' (the default) or 'new' (Nova, design 200). */
+    look: function () { return pick('look', 'classic') === 'new' ? 'new' : 'classic'; },
     weather: function () { return pick('weather', true); },
     /** OK on the screensaver opens the title it shows, in its app; any other key only closes it (off by default). */
     saverWatch: function () { return pick('saverWatch', false) === true; },

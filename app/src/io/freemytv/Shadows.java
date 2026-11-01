@@ -67,6 +67,17 @@ final class Shadows {
         return size;
     }
 
+    /**
+     * Frees every mask now (a new layout or look, or the home screen going away), not at the next GC: on Android 8+
+     * their pixels are native memory. A display list already recorded keeps its own reference. Returns how many.
+     */
+    int release() {
+        int n = cache.size();
+        for (Bitmap b : cache.values()) b.recycle();
+        cache.clear();
+        return n;
+    }
+
     private Bitmap mask(int radius, int b, int m, int w, int h, boolean dither) {
         long key = (long) radius << 48 | (long) b << 32 | (long) w << 16 | h | (dither ? Long.MIN_VALUE : 0);
         Bitmap mask = cache.get(key);
@@ -90,7 +101,7 @@ final class Shadows {
         }
         mask = full.extractAlpha();
         full.recycle();
-        if (cache.size() > 64) cache.clear();     // focus animations step through a few sizes; keep it bounded
+        if (cache.size() > 64) release();         // focus animations step through a few sizes; keep it bounded
         cache.put(key, mask);
         return mask;
     }

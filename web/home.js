@@ -385,6 +385,21 @@
     return (r.left + r.right) / 2;
   }
 
+  // MARK: - Look (Home Settings → Appearance), with Android's HomeLayout measures
+
+  /** Nova (design 200): text and focusable items inside the 5% safe area, the tabs, buttons and a clock on one top bar. */
+  function nova() { return Prefs.look() === 'new'; }
+  function marginX() { return nova() ? 96 : 80; }
+  function contentR() { return nova() ? 1824 : 1840; }
+
+  /** The body's look-new class (home.css has Nova's rules under it), then what JS places by those measures. */
+  function applyLook() {
+    setClass(body, 'look-new', nova());
+    layoutCards();
+    renderShelf();
+    renderDrawer();
+  }
+
   // MARK: - Top: title, tabs, buttons, quotes
 
   var TAB_KIND = [null, 'movie', 'tv'];
@@ -403,11 +418,13 @@
     var defs = [['live_tv', tr('light|Live TV')], ['hdmi', tr('HDMI Inputs')], ['settings', tr('light|Settings')]];
     for (var b = 0; b < 3; b++) {
       var r = el('button', 'round' + (b === 2 ? ' last' : ''), buttons);
-      r.style.left = (1596 + 88 * b) + 'px';
+      r.style.left = (1596 + 88 * b) + 'px';   // Classic; Nova lines them up before the clock (home.css)
       sym(defs[b][0], r);
       el('div', 'tip', r, defs[b][1]);
       hover(r, Z.TOP, 3 + b);
     }
+    el('div', 'barclock', buttons);   // Nova's top-bar clock (hidden in Classic); it takes no focus
+    renderClock();
   }
 
   function renderQuotes() {
@@ -456,13 +473,14 @@
    * transform and the backdrop's opacity animate: the widths change at once (older TVs).
    */
   function layoutCards() {
-    var holder = $('cards'), nodes = holder.children, left = 80, scroll = Math.max(0, st.card - 2) * 360;
+    var holder = $('cards'), nodes = holder.children, left = marginX(), scroll = Math.max(0, st.card - 2) * 360;
+    var wideW = contentR() - marginX() - 2 * 320 - 2 * 40;   // 1040 in Classic
     for (var i = 0; i < nodes.length; i++) {
-      var wide = i === st.card, w = wide ? 1040 : 320, n = nodes[i], at = left - scroll;
+      var wide = i === st.card, w = wide ? wideW : 320, n = nodes[i], at = left - scroll;
       n.style.left = left + 'px';
       n.style.width = w + 'px';
       setClass(n, 'wide', wide);
-      setClass(n, 'edge', at < 0 || at > 1740);
+      setClass(n, 'edge', at < 0 || at > contentR() - 100);
       if (wide && !n.getAttribute('data-back') && cards[i]) {
         n.setAttribute('data-back', '1');
         n.querySelector('.back').style.backgroundImage = 'url(' + Data.image(cards[i].backdrop, 'w1280') + ')';
@@ -511,6 +529,8 @@
     var d = new Date(), c = $('clock');
     c.firstChild.textContent = formatDate('format|h:mm', d.getTime());
     c.lastChild.textContent = formatDate('format|EEEE, MMMM d', d.getTime());
+    var bar = $('buttons').querySelector('.barclock');
+    if (bar) bar.textContent = c.firstChild.textContent;
   }
 
   /** On the minute, so the clock never runs late (the 30-second refresh could, by up to 30 s). */
@@ -526,7 +546,9 @@
   function renderShelf() {
     var n = Math.min(shelf.length, SHELF_VISIBLE), gap = 48, pad = 40;
     // 16:9 tiles, as on Android: never taller than 126, and the glass keeps its bottom edge.
-    var tw = Math.min(126 * 16 / 9, (1760 - Math.max(0, n - 1) * gap) / Math.max(1, n)), th = tw * 9 / 16;
+    // Nova keeps the glass, not only the tiles, inside the safe area.
+    var full = contentR() - marginX() - (nova() ? 2 * pad : 0);
+    var tw = Math.min(126 * 16 / 9, (full - Math.max(0, n - 1) * gap) / Math.max(1, n)), th = tw * 9 / 16;
     var width = n * tw + Math.max(0, n - 1) * gap, left = (1920 - width) / 2;
     var platter = $('platter');
     platter.style.display = n ? '' : 'none';
@@ -534,7 +556,7 @@
     platter.style.width = (width + 2 * pad) + 'px';
     platter.style.top = (814 + 126 - th) + 'px';
     platter.style.height = (th + 2 * pad) + 'px';
-    $('quotes').style.right = (1920 - left - width) + 'px';
+    $('quotes').style.right = (nova() ? 1920 - contentR() : 1920 - left - width) + 'px';
     var tiles = $('tiles');
     tiles.innerHTML = '';
     tileStep = tw + gap;
@@ -602,14 +624,14 @@
     drawerItems.push({label: tr('Home Settings'), symbol: 'settings', run: openSettings});
     if (TV.canOpenSettings) drawerItems.push({label: tr('TV Settings'), symbol: 'tv_settings', run: tvSettings});
     var n = drawerItems.length, gap = 18, groupGap = 56, groups = drawerInputs > 0 && drawerInputs < n ? 2 : 1;
-    var tw = Math.min(230, (1760 - Math.max(0, n - groups) * gap - (groups - 1) * groupGap) / Math.max(1, n));
-    var xPos = 80;
+    var m = marginX(), tw = Math.min(230, (contentR() - m - Math.max(0, n - groups) * gap - (groups - 1) * groupGap) / Math.max(1, n));
+    var xPos = m;
     for (var k = 0; k < n; k++) {
       if (k === drawerInputs && k > 0) {
         xPos += groupGap - gap;
         el('div', 'row-title', d, tr('Shortcuts')).style.left = (xPos + 4) + 'px';
       }
-      if (k === 0 && drawerInputs) el('div', 'row-title', d, tr('Inputs')).style.left = '84px';
+      if (k === 0 && drawerInputs) el('div', 'row-title', d, tr('Inputs')).style.left = (m + 4) + 'px';
       var item = drawerItems[k], key = el('div', 'key glass' + (item.off ? ' off' : ''), d);
       key.style.left = xPos + 'px';
       key.style.width = tw + 'px';
@@ -627,20 +649,20 @@
     var old = d.querySelectorAll('.panel');
     for (var o = 0; o < old.length; o++) d.removeChild(old[o]);
     var wx = Prefs.weather(), coins = Data.activeCoins(), qt = coins.length > 0;
-    var split = 80 + 1760 * 0.585;
+    var m = marginX(), r = contentR(), split = m + (r - m) * 0.585;
     if (wx) {
       var w = el('div', 'panel glass', d);
       w.id = 'weather';
-      w.style.left = '80px';
-      w.style.width = ((qt ? split - 16 : 1840) - 80) + 'px';
+      w.style.left = m + 'px';
+      w.style.width = ((qt ? split - 16 : r) - m) + 'px';
       renderWeather(w);
     }
     if (qt) {
       var q = el('div', 'panel glass', d);
       q.id = 'prices';
-      var left = wx ? split + 16 : 80;
+      var left = wx ? split + 16 : m;
       q.style.left = left + 'px';
-      q.style.width = (1840 - left) + 'px';
+      q.style.width = (r - left) + 'px';
       renderPrices(q, coins);
     }
   }
@@ -758,6 +780,8 @@
         step: function (d) { cycle('temperature', ['auto', 'C', 'F'], unit, d); renderPanels(); }},
       {label: tr('Theme'), value: theme === 'light' ? tr('Light') : theme === 'dark' ? tr('Dark') : auto,
         step: function (d) { cycle('theme', ['auto', 'light', 'dark'], theme, d); checkNight(); }},
+      {label: tr('Appearance'), value: nova() ? tr('appearance|Nova') : tr('appearance|Classic'),
+        step: function (d) { cycle('look', ['classic', 'new'], Prefs.look(), d); applyLook(); }},
       {label: tr('Dim'), value: dimName(),
         step: function (d) { cycle('dim', ['off', 'low', 'medium', 'high', 'auto'], Prefs.dim(), d); applyDim(); }},
       {label: tr('Screensaver'), value: saverMode() === 'clock' ? tr('Clock') : tr('Photos'),
@@ -1707,6 +1731,7 @@
   // LG's screensaver waits only when ours will show: not under a sheet (ours waits there), and not without photos.
   TV.holdScreenSaver(function () { return !sheetOpen() && (saverMode() === 'clock' || saverPhotos().length > 0); });
   fit();
+  setClass(body, 'look-new', nova());
   renderTop();
   applyDim();
   tickClock();

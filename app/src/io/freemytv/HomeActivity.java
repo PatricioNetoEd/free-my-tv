@@ -21,6 +21,7 @@ public class HomeActivity extends Activity {
     static final String EXTRA_ALL_APPS = "io.freemytv.ALL_APPS";
     private HomeView home;
     private int prefsVersion = Prefs.version;   // settings changed while we were away: start over
+    private int lookChanges = Prefs.lookChanges;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -68,10 +69,15 @@ public class HomeActivity extends Activity {
         // on screen over ours. Opaque again on every resume (setTranslucent is public from Android 11).
         if (RemoteKeys.TCL && Build.VERSION.SDK_INT >= 30) setTranslucent(false);
         if (prefsVersion != Prefs.version) {
+            // Only the look changed (Home Settings > Appearance): HomeView.resume lays this view out again.
+            boolean lookOnly = Prefs.version - prefsVersion == Prefs.lookChanges - lookChanges;
             prefsVersion = Prefs.version;
-            HomeData.get(this).settingsChanged();
-            recreate();   // a new language or city: draw everything again
-            return;
+            lookChanges = Prefs.lookChanges;
+            if (!lookOnly) {
+                HomeData.get(this).settingsChanged();
+                recreate();   // a new language or city: draw everything again
+                return;
+            }
         }
         if (home != null) home.resume();
         Updates.tellOnce(this);   // an update the week's check got ready: said once
