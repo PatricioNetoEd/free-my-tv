@@ -588,6 +588,46 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 #saver .clock .title { margin-top: 18px; font-size: 26px; font-weight: 500; color: rgba(255, 255, 255, 0.65); }
 #saver .clock .hint { margin-top: 8px; font-size: 22px; color: rgba(255, 255, 255, 0.55); }
 
+/* MARK: - Nova (Home Settings → Appearance; design 200, card 202): Android's HomeLayout.NOVA. Text and focusable items
+   stay inside the 5% safe area (96 px at the sides, 60 at the top and bottom); the tabs, the round buttons and a small
+   clock share a 64 px top bar at y = 60; no text under 24 px. Only static rules: switching the class lays out once. */
+
+.barclock { display: none; }
+.look-new #title { left: 93px; top: 177px; font-size: 52px; }
+.look-new #tabs { left: 96px; top: 64px; height: 56px; }
+.look-new .tab { height: 56px; padding: 0 24px; margin-right: 8px; border-radius: 28px; font-size: 28px; line-height: 56px; }
+.look-new #quotes { top: 189px; font-size: 24px; }
+.look-new #buttons { position: absolute; right: 96px; top: 60px; height: 64px; white-space: nowrap; }
+.look-new .round {
+  position: relative;
+  display: inline-block;
+  vertical-align: top;
+  left: auto !important;
+  top: 0;
+  width: 64px;
+  height: 64px;
+  margin-left: 20px;
+  border-radius: 32px;
+}
+.look-new .round .sym { left: 18px; top: 18px; }
+.look-new .round .tip { top: 72px; font-size: 24px; }
+.look-new .barclock {
+  display: inline-block;
+  vertical-align: top;
+  margin-left: 32px;
+  height: 64px;
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 64px;
+  color: #1D1D1F;
+  -webkit-font-feature-settings: 'tnum';
+  font-feature-settings: 'tnum';
+}
+.night .barclock { color: #F5F5F7; }
+.look-new #clock { left: 92px; }
+.look-new .key .label, .look-new .panel .side, .look-new #weather .range, .look-new #weather .hour .t,
+.look-new #weather .hour .low, .look-new #weather .sun, .look-new #prices .coin .c, .look-new .box .hint { font-size: 24px; }
+
 /* MARK: - Toast */
 
 #toast {
