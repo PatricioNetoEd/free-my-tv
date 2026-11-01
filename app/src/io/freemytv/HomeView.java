@@ -2220,14 +2220,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         int ink = blend(tone(off ? 0xFF8E8E93 : L_INK, off ? 0x6BFFFFFF : 0xF2FFFFFF), INK, f);
         Symbols.draw(getContext(), c, it.symbol, cx, cell.top + cell.height() * 0.4f, 34 * k * s, ink);
         drawerLabel.setColor(ink);
-        drawerLabel.setTextSize(23 * k * s);
+        drawerLabel.setTextSize(lay.text(23) * k * s);
         float room = cell.width() - 16 * k, wide = drawerLabel.measureText(it.label);
         // A long name ("Home Settings", an input you renamed) shrinks a little before it gets cut.
-        if (wide > room) drawerLabel.setTextSize(Math.max(18 * k * s, 23 * k * s * room / wide));
+        if (wide > room) drawerLabel.setTextSize(Math.max(lay.text(18) * k * s, lay.text(23) * k * s * room / wide));
         fitPaint.set(drawerLabel);
         String label = TextUtils.ellipsize(it.label, fitPaint, room, TextUtils.TruncateAt.END).toString();
         c.drawText(label, cx, cell.top + cell.height() * 0.8f, drawerLabel);
-        drawerLabel.setTextSize(23 * k);
+        drawerLabel.setTextSize(lay.text(23) * k);
     }
 
     /** Weather for your location: now (large), the next 6 hours or 5 days, and sunrise and sunset. */
