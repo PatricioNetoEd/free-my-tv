@@ -234,6 +234,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Spring[] tileFocus = new Spring[0];
     private RectF[] tileRects = new RectF[0];
     private final Map<String, Bitmap> crispLogos = new HashMap<>();   // logos already sized for the focused tile
+    /** The ones of those made here (Ui.downscale's copies), not the app's own logo when it was already the size. */
+    private final Set<Bitmap> crispMade = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     /** Each app's tile like its Apple TV icon: brand colors (top, bottom) and logo (0 = as is, 1 = white, 2 = dark). */
     private static final Map<String, int[]> TILE_STYLE = new HashMap<>();
     static {
@@ -686,7 +688,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     void resume() {
         if (running) return;
         running = true;
-        if (w > 0 && look() != lay) layoutAll();   // Home Settings changed the look: no restart needed
+        // Home Settings changed the look (HomeActivity keeps this view for that): laid out again here, once. Before the
+        // first layout (w == 0) onSizeChanged does it.
+        if (w > 0 && look() != lay) layoutAll();
         checkNight(false);
         boolean h24 = Ui.h24();
         if (h24 != clock24) {   // 12/24 hours changed (the TV's or the Clock row's): the clock and the drawer's times again
@@ -761,6 +765,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         click.release();
         watchArt.close();   // its thread is shared: nothing is left running for this view
+        releaseSized();     // a new HomeView follows (new settings): this one's bitmaps go now, not at the next GC
     }
 
     /**
@@ -893,16 +898,37 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         layoutAll();
     }
 
+    /** layoutAll ran once: from then on it frees what the previous layout made. */
+    private boolean laidOut;
+
+    /** The bitmaps this view made at the current layout's sizes (made again as they're drawn). Returns how many. */
+    private int releaseSized() {
+        return releaseLogos() + shadows.release() + weatherSnapshot.release() + quotesSnapshot.release();
+    }
+
     private static HomeLayout look() {
         return Prefs.lookNew() ? HomeLayout.NOVA : HomeLayout.CLASSIC;
     }
 
-    /** Everything measured for this size and look: at a new size, and when the look changed in Home Settings. */
+    /**
+     * Everything measured for this size and look: at a new size (onSizeChanged), and when the look changed in Home
+     * Settings (resume; HomeActivity keeps this view then, instead of making a second one).
+     */
     private void layoutAll() {
+        HomeLayout was = lay;
         lay = look();
+        boolean newLook = laidOut && was != lay;
+        if (laidOut) {
+            // What was sized for the old layout goes before the new one is made: on Android 8+ a bitmap's pixels are
+            // native memory, freed only when the GC gets to it, so the two looks' copies would stay side by side.
+            int freed = releaseSized();
+            if (newLook) AppLog.w("home: look " + (lay.nova ? "nova" : "classic") + ", " + freed + " bitmaps released");
+        }
+        laidOut = true;
         quotes = null;
         watchTitles = null;
         makePaints();
+        if (newLook) fitPlaying();   // what's playing, cut at the new text size
         gridLabels = null;
         clockMinute = -1;
         updateClock();
@@ -1649,7 +1675,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             snap(tileRects[i]);
             x += tw + gap;
         }
+        releaseLogos();
+    }
+
+    /**
+     * The logos sized for the previous tiles go now, not at the next GC (on Android 8+ their pixels are native memory,
+     * and a look change or a new shelf would otherwise hold both sets). A logo already at its size is the app's own
+     * (HomeApps keeps it for every screen): only the copies made here are freed. Returns how many.
+     */
+    private int releaseLogos() {
+        int n = crispMade.size();
+        for (Bitmap b : crispMade) b.recycle();
+        crispMade.clear();
         crispLogos.clear();
+        return n;
     }
 
     /** Scrolls the shelf, one app at a time, so the focused app is shown: the tiles slide there (unless `snap`). */
@@ -2019,6 +2058,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (rest) scale /= 1 + FOCUS_GROW;
         Bitmap out = Ui.downscale(src, Math.round(lw * scale), Math.round(lh * scale));
         crispLogos.put(key, out);
+        if (out != src) crispMade.add(out);
         return out;
     }
 
@@ -2354,8 +2394,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             int left = Math.round(r.left), top = Math.round(r.top);
             int w = Math.max(1, Math.round(r.right) - left), h = Math.max(1, Math.round(r.bottom) - top);
             if (bitmap == null || bitmap.getWidth() != w || bitmap.getHeight() != h) {
+                release();   // the card's old size (another look or screen size) goes now, not at the next GC
                 bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-                this.key = "";
             }
             if (!key.equals(this.key)) {
                 bitmap.eraseColor(0);
@@ -2365,6 +2405,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 this.key = key;
             }
             c.drawBitmap(bitmap, left, top, null);
+        }
+
+        /** Frees the bitmap (drawn again from scratch next time); 1 if there was one. */
+        int release() {
+            key = "";
+            if (bitmap == null) return 0;
+            bitmap.recycle();
+            bitmap = null;
+            return 1;
         }
     }
 
