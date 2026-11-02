@@ -63,6 +63,51 @@ var Prefs = (function () {
   try { v = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
   function save() { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} }
   function pick(name, fallback) { return v[name] === undefined ? fallback : v[name]; }
+
+  // Profiles (card 214a), as on Android (Profiles.java): 0 is the Main one, whose shelf is the 'shelf' every version
+  // used, so nothing is written just by opening this version; the others' keys end in '.<id>', and ids aren't reused.
+  var MAIN = 0, MAX = 6, NAME_MAX = 12, TABS = 3;
+  var COLORS = ['#3563E0', '#D0215F', '#2E7D32', '#C2410C', '#8550D8', '#00796B', '#856A00', '#5F6E88'];
+  function suffix(id) { return id === MAIN ? '' : '.' + id; }
+  function profileIds() {
+    var saved = pick('profiles', null), out = [MAIN];
+    if (saved && saved.length) {
+      for (var i = 0; i < saved.length; i++) {
+        var id = parseInt(saved[i], 10);
+        if (id >= 0 && out.indexOf(id) < 0) out.push(id);
+      }
+    }
+    return out;
+  }
+  function active() {
+    var id = pick('profile', MAIN);
+    return profileIds().indexOf(id) >= 0 ? id : MAIN;
+  }
+  /** One code point from i (a pair of surrogates counts once): [code point, length]. */
+  function codeAt(s, i) {
+    var a = s.charCodeAt(i), b = s.charCodeAt(i + 1);
+    return a >= 0xD800 && a <= 0xDBFF && b >= 0xDC00 && b <= 0xDFFF ? [(a - 0xD800) * 0x400 + b - 0xDC00 + 0x10000, 2] : [a, 1];
+  }
+  /** A letter or a digit (ES5 has no \p{L}): ASCII's, and anything outside the punctuation, symbol and emoji blocks. */
+  function wordCode(c) {
+    if (c < 0x80) return /[A-Za-z0-9]/.test(String.fromCharCode(c));
+    if (c < 0xC0 || c === 0xD7 || c === 0xF7) return c === 0xAA || c === 0xBA;
+    return !(c >= 0x300 && c <= 0x36F || c >= 0x2000 && c <= 0x2BFF || c >= 0x3000 && c <= 0x303F
+      || c >= 0xE000 && c <= 0xF8FF || c >= 0xFE00 && c <= 0xFE6F || c >= 0xFF00 && c <= 0xFF0F || c >= 0x1F000 && c <= 0x1FAFF);
+  }
+  /** Trimmed, at most 12 code points; '' when it has no letter or digit. */
+  function cleanName(typed) {
+    var s = String(typed || '').replace(/^\s+|\s+$/g, ''), out = '', n = 0, any = false;
+    for (var i = 0; i < s.length && n < NAME_MAX; n++) {
+      var c = codeAt(s, i);
+      out += s.substr(i, c[1]);
+      any = any || wordCode(c[0]);
+      i += c[1];
+    }
+    out = out.replace(/\s+$/, '');
+    return any ? out : '';
+  }
+
   return {
     version: 0,
     language: function () { return pick('language', CONFIG.language || 'auto'); },
@@ -85,7 +130,11 @@ var Prefs = (function () {
     cards: function () { var n = pick('cards', 3); return n < 3 ? 3 : n > 6 ? 6 : n; },
     /** Cartoons and anime out of the picks (Home Settings), or config.properties' hide_animation. */
     hideAnimation: function () { return pick('hideAnimation', CONFIG.hideAnimation === true) === true; },
-    shelf: function () { return pick('shelf', null); },
+    /** The active profile's shelf (app ids in order), or null for the built-in one; the Main profile's is 'shelf'. */
+    shelf: function () { return pick('shelf' + suffix(active()), null); },
+    shelfOf: function (id) { return pick('shelf' + suffix(id), null); },
+    setShelf: function (ids) { this.setShelfOf(active(), ids); },
+    setShelfOf: function (id, ids) { this.set('shelf' + suffix(id), ids); },
     /** The shelf_apps of the build that last set the shelf, so a new one wins once over the TV's choice. */
     shelfConfig: function () { return pick('shelfConfig', ''); },
     /** The weather's city, picked on the TV (Home Settings → City), or config.properties' (or the time zone's). */
@@ -106,6 +155,71 @@ var Prefs = (function () {
     },
     openPicks: function () { return pick('openPicks', CONFIG.openPicksIn === 'nuvio' ? 'nuvio' : 'apps'); },
     set: function (name, value) { v[name] = value; save(); this.version++; },
+    /** Saved without version++: a profile switch is applied in place (home.js), nothing is fetched again. */
+    quiet: function (name, value) { if (value === undefined) delete v[name]; else v[name] = value; save(); },
+    MAX_PROFILES: MAX,
+    PROFILE_COLORS: COLORS,
+    cleanName: cleanName,
+    profiles: profileIds,
+    profile: active,
+    profileName: function (id) {
+      var n = pick('profile.' + id + '.name', '');
+      return n || (id === MAIN ? tr('profile|Main') : '');
+    },
+    /** A palette index, 0 to 7 (design/tokens-v2.json → profile.palette, gold in place of red). */
+    profileColor: function (id) { var c = pick('profile.' + id + '.color', 0); return c >= 0 && c < COLORS.length ? c : 0; },
+    /** The tab the home screen starts on: 0 Explore, 1 Movies, 2 Shows. */
+    profileTab: function (id) { var t = pick('profile.' + id + '.tab', 0); return t >= 0 && t < TABS ? t : 0; },
+    startTab: function () { return this.profileTab(active()); },
+    /** '' (off) or '10': saved only, the picks' filter is card 214c's. */
+    profileKids: function (id) { return pick('profile.' + id + '.kids', ''); },
+    /** The first letter or digit of the name, uppercased. */
+    initial: function (id) {
+      var name = this.profileName(id);
+      for (var i = 0; i < name.length; ) {
+        var c = codeAt(name, i);
+        if (wordCode(c[0])) return name.substr(i, c[1]).toUpperCase();
+        i += c[1];
+      }
+      return '?';
+    },
+    setProfile: function (id) { if (profileIds().indexOf(id) >= 0) this.quiet('profile', id); },
+    renameProfile: function (id, typed) { var n = cleanName(typed); if (n) this.quiet('profile.' + id + '.name', n); },
+    setProfileColor: function (id, c) { this.quiet('profile.' + id + '.color', Math.max(0, Math.min(COLORS.length - 1, c))); },
+    setProfileTab: function (id, t) { this.quiet('profile.' + id + '.tab', Math.max(0, Math.min(TABS - 1, t))); },
+    setProfileKids: function (id, on) { this.quiet('profile.' + id + '.kids', on ? '10' : undefined); },
+    /**
+     * A new profile with `shelfIds` (the current profile's shelf as shown), its starting tab and the first color no
+     * profile uses; not a kids one. Returns its id, or -1 (6 already, or no letter or digit in the name).
+     */
+    createProfile: function (typed, shelfIds) {
+      var name = cleanName(typed), ids = profileIds();
+      if (!name || ids.length >= MAX) return -1;
+      var id = Math.max(1, pick('profileNext', 1)), taken = [], i;
+      for (i = 0; i < ids.length; i++) { id = Math.max(id, ids[i] + 1); taken[this.profileColor(ids[i])] = true; }
+      var color = 0;
+      while (color < COLORS.length - 1 && taken[color]) color++;
+      v.profiles = ids.concat([id]);
+      v.profileNext = id + 1;
+      v['profile.' + id + '.name'] = name;
+      v['profile.' + id + '.color'] = color;
+      v['profile.' + id + '.tab'] = this.startTab();
+      v['shelf' + suffix(id)] = shelfIds.slice();
+      save();
+      return id;
+    },
+    /** Its keys go (never the Main one); the active one switches to the Main profile first. No app is touched. */
+    deleteProfile: function (id) {
+      if (id === MAIN) return;
+      if (active() === id) v.profile = MAIN;
+      v.profiles = profileIds().filter(function (x) { return x !== id; });
+      delete v['shelf' + suffix(id)];
+      delete v['profile.' + id + '.name'];
+      delete v['profile.' + id + '.color'];
+      delete v['profile.' + id + '.tab'];
+      delete v['profile.' + id + '.kids'];
+      save();
+    },
     setCoin: function (i, on) {
       var c = (pick('coins', null) || [true, true, true, true]).slice();
       c[i] = on;

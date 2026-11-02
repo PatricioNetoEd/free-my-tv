@@ -331,7 +331,7 @@
 
   function pickShelf() {
     if (WANTED.length && Prefs.shelfConfig() !== WANTED.join(',')) {
-      Prefs.set('shelf', null);
+      Prefs.setShelfOf(0, null);   // a new build's shelf_apps wins once, only over the Main profile's choice (214)
       Prefs.set('shelfConfig', WANTED.join(','));
     }
     var chosen = Prefs.shelf(), out = [];
@@ -361,11 +361,11 @@
 
   // MARK: - Focus
 
-  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about'};
-  var st = {zone: Z.SHELF, top: 0, tab: 0, card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, city: 0, key: 0};
+  var Z = {TOP: 'top', CARDS: 'cards', SHELF: 'shelf', DRAWER: 'drawer', APPS: 'apps', SETTINGS: 'settings', EDIT: 'edit', LANG: 'lang', CITY: 'city', KEY: 'key', ABOUT: 'about', PROF: 'prof'};
+  var st = {zone: Z.SHELF, top: 0, tab: Prefs.startTab(), card: 0, shelf: 0, drawer: 0, grid: 0, row: 0, edit: 0, lang: 0, city: 0, key: 0, prof: 0};
   var cards = [];
 
-  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT; }
+  function sheetOpen() { return st.zone === Z.APPS || st.zone === Z.SETTINGS || st.zone === Z.EDIT || st.zone === Z.LANG || st.zone === Z.CITY || st.zone === Z.KEY || st.zone === Z.ABOUT || st.zone === Z.PROF; }
 
   function updateFocus() {
     var i, list;
@@ -395,6 +395,7 @@
     if (langHint) langHint.textContent = (st.lang + 1) + ' / ' + languageChoices().length + '  ·  ' + tr('OK picks, Back cancels.');
     focusRows($('citypick'), st.city, st.zone === Z.CITY);
     focusRows($('keypick'), st.key, st.zone === Z.KEY);
+    focusRows($('profiles'), st.prof, st.zone === Z.PROF);
     setClass(body, 'drawer-open', st.zone === Z.DRAWER);
     followSoon();
   }
@@ -841,8 +842,10 @@
     setClass($('about'), 'open', false);
     closeField('citypick');
     closeField('keypick');
+    closeField('profiles');
     setClass($('citypick'), 'open', false);
     setClass($('keypick'), 'open', false);
+    setClass($('profiles'), 'open', false);
     langHint = null;
     st.zone = Z.SHELF;
     updateFocus();
@@ -854,6 +857,8 @@
     var unit = Prefs.temperature(), theme = Prefs.theme();
     var auto = tr('Automatic'), picked = pickedLanguage();
     var rows = [
+      {label: tr('Profiles'), value: Prefs.profileName(Prefs.profile()), opens: true, profile: Prefs.profile(),
+        step: function (d) { if (d >= 0) openProfiles(); }},
       {label: tr('Language'), value: picked === 'auto' ? auto : I18N.languageName(picked), opens: true, language: true,
         step: function (d) { if (d >= 0) openLanguages(); }},
       {label: tr('Temperature'), value: unit === 'C' ? '°C' : unit === 'F' ? '°F' : tr('unit|Automatic'),
@@ -937,6 +942,7 @@
       else {
         var v = el('span', 'value', row);
         if (r.value === '›') v.textContent = '›';
+        else if (r.profile !== undefined) { disk(r.profile, v); v.appendChild(document.createTextNode(r.value)); el('span', 'chev', v, '›'); }
         else if (r.opens) { v.appendChild(document.createTextNode(r.value)); el('span', 'chev', v, '›'); }
         else { el('span', 'chev', v, '‹'); v.appendChild(document.createTextNode(r.value)); el('span', 'chev', v, '›'); }
       }
@@ -1307,7 +1313,8 @@
     box.innerHTML = '';
     var title = el('div', 'title', box);
     sym('apps', title);
-    title.appendChild(document.createTextNode(tr('Shelf')));
+    // Whose shelf it is, once there's more than one profile.
+    title.appendChild(document.createTextNode(Prefs.profiles().length > 1 ? trf('Shelf · {name}', {name: Prefs.profileName(Prefs.profile())}) : tr('Shelf')));
     var list = el('div', 'list', box), holder = el('div', 'rows', list);
     list.style.height = Math.min(e.rows.length, 7) * 78 + 'px';
     for (var i = 0; i < e.rows.length; i++) {
@@ -1342,12 +1349,225 @@
       ids.splice(at, 1);
       ids.splice(to, 0, app.id);
     }
-    Prefs.set('shelf', ids);
+    Prefs.setShelf(ids);
     pickShelf();
     renderShelf();
     var again = editList();
     for (var i = 0; i < again.rows.length; i++) if (again.rows[i].id === app.id) st.edit = i;
     renderShelfEdit();
+  }
+
+  // MARK: - Profiles (card 214a): the list, one profile's rows, its name typed with the TV's keyboard
+
+  var profMode = 'list', profEdit = 0, profNaming = '', profTyped = '';
+
+  /** A profile's disk: its color and the white initial (its name is always beside it: never by color alone). */
+  function disk(id, parent, color) {
+    var d = el('span', 'disk', parent, id === null ? '+' : Prefs.initial(id));
+    if (id === null) setClass(d, 'add', true);
+    else d.style.backgroundColor = Prefs.PROFILE_COLORS[color === undefined ? Prefs.profileColor(id) : color];
+    return d;
+  }
+
+  function tabName(t) { return t === 1 ? tr('Movies') : t === 2 ? tr('Shows') : tr('Explore'); }
+
+  function colorName(c) {
+    return [tr('color|Blue'), tr('color|Pink'), tr('color|Green'), tr('color|Orange'), tr('color|Purple'), tr('color|Teal'),
+      tr('color|Gold'), tr('color|Slate')][c];
+  }
+
+  /** What the sheet shows now: the list, one profile, its name being typed, or the question before deleting it. */
+  function profRows() {
+    var out = [], ids = Prefs.profiles(), i;
+    if (profMode === 'list') {
+      for (i = 0; i < ids.length; i++) out.push({kind: 'pick', id: ids[i]});
+      out.push({kind: 'add'});
+    } else if (profMode === 'one') {
+      if (profEdit !== Prefs.profile()) out.push({kind: 'use'});
+      out.push({kind: 'name'}, {kind: 'color'}, {kind: 'tab'});
+      // The kids row (Prefs.setProfileKids) stays hidden until card 214c gives it its filter (owner, 2026-11-02).
+      if (profEdit !== 0) out.push({kind: 'delete'});
+    } else if (profMode === 'name') {
+      out.push({kind: 'field'}, {kind: 'save'});
+    } else {
+      out.push({kind: 'cancel'}, {kind: 'confirm'});   // Cancel first: one stray OK keeps it
+    }
+    return out;
+  }
+
+  function rowOf(kind) {
+    var rows = profRows();
+    for (var i = 0; i < rows.length; i++) if (rows[i].kind === kind) return i;
+    return 0;
+  }
+
+  function renderProfiles() {
+    var box = $('profiles').firstChild, old = fieldOf('profiles'), typed = old ? old.value : profTyped, inField = typingIn('profiles');
+    box.innerHTML = '';
+    var rows = profRows(), title = el('div', 'title', box), i;
+    if (profMode === 'one' || profMode === 'delete') {
+      disk(profEdit, title);
+      title.appendChild(document.createTextNode(Prefs.profileName(profEdit)));
+    } else {
+      title.textContent = profMode === 'name' ? (profNaming === 'new' ? tr('Add profile') : tr('profile|Name')) : tr('Profiles');
+    }
+    if (profMode === 'delete') {
+      el('div', 'hint ask', box, trf('Delete the profile {name}? Its row goes away; the apps stay installed.', {name: Prefs.profileName(profEdit)}));
+    }
+    var list = el('div', 'list', box), holder = el('div', 'rows', list), full = Prefs.profiles().length >= Prefs.MAX_PROFILES;
+    list.style.height = Math.min(rows.length, 7) * 78 + 'px';
+    for (i = 0; i < rows.length; i++) {
+      var r = rows[i], row, v;
+      if (r.kind === 'field') {
+        textField(holder, Z.PROF, typed, tr('Profile name'), tr('Profile name')).setAttribute('maxlength', '24');
+        continue;
+      }
+      row = el('div', 'row', holder);
+      if (r.kind === 'pick') {
+        disk(r.id, row);
+        row.appendChild(document.createTextNode(Prefs.profileName(r.id)));
+        v = el('span', 'value', row);
+        if (r.id === Prefs.profile()) sym('check', v);   // the active one: not by color alone
+        el('span', 'chev', v, '›');
+      } else if (r.kind === 'add') {
+        disk(null, row);
+        row.appendChild(document.createTextNode(tr('Add profile')));
+        if (full) { setClass(row, 'dim', true); el('span', 'value', row, tr('Unavailable')); }
+      } else if (r.kind === 'color' || r.kind === 'tab') {
+        row.appendChild(document.createTextNode(r.kind === 'color' ? tr('Color') : tr('Starting tab')));
+        v = el('span', 'value', row);
+        el('span', 'chev', v, '‹');
+        if (r.kind === 'color') disk(profEdit, v);
+        v.appendChild(document.createTextNode(r.kind === 'color' ? colorName(Prefs.profileColor(profEdit)) : tabName(Prefs.profileTab(profEdit))));
+        el('span', 'chev', v, '›');
+      } else if (r.kind === 'name') {
+        row.appendChild(document.createTextNode(tr('profile|Name')));
+        v = el('span', 'value', row, Prefs.profileName(profEdit));
+        el('span', 'chev', v, '›');
+      } else {
+        row.textContent = r.kind === 'use' ? tr('Use this profile') : r.kind === 'delete' ? tr('Delete profile')
+          : r.kind === 'save' ? tr('Save') : r.kind === 'cancel' ? tr('Cancel') : tr('Delete');
+      }
+      hover(row, Z.PROF, i);
+    }
+    if (profMode === 'one') el('div', 'hint', box, tr('OK or the arrows change the value.'));
+    if (inField) openField('profiles');
+    updateFocus();
+  }
+
+  /** Home Settings → Profiles: the list, on the active profile. */
+  function openProfiles() {
+    setClass($('settings'), 'open', false);
+    st.zone = Z.PROF;
+    profMode = 'list';
+    st.prof = Math.max(0, Prefs.profiles().indexOf(Prefs.profile()));
+    renderProfiles();
+    setClass($('profiles'), 'open', true);
+    updateFocus();
+  }
+
+  /** Into another of the sheet's modes; the name field starts with `typed` (a new one: empty). */
+  function profGo(mode, row, typed) {
+    closeField('profiles');
+    profMode = mode;
+    profTyped = typed || '';
+    $('profiles').firstChild.innerHTML = '';   // the old field's text doesn't carry over
+    renderProfiles();
+    st.prof = row;
+    updateFocus();
+    if (mode === 'name') openField('profiles');
+  }
+
+  function activateProfiles() {
+    var r = profRows()[st.prof];
+    if (!r) return;
+    switch (r.kind) {
+      case 'pick': profEdit = r.id; profGo('one', 0); return;
+      case 'add':
+        if (Prefs.profiles().length >= Prefs.MAX_PROFILES) { toast(tr('Up to 6 profiles')); return; }
+        profNaming = 'new';
+        profGo('name', 0, '');
+        return;
+      case 'use':
+        switchProfile(profEdit);
+        profGo('list', Prefs.profiles().indexOf(profEdit));
+        return;
+      case 'name': profNaming = 'rename'; profGo('name', 0, Prefs.profileName(profEdit)); return;
+      case 'color': case 'tab': stepProfile(1); return;
+      case 'delete': profGo('delete', 0); return;
+      case 'field': openField('profiles'); return;
+      case 'save': saveProfileName(); return;
+      case 'cancel': profGo('one', rowOf('delete')); return;
+      case 'confirm': {
+        var id = profEdit, wasActive = id === Prefs.profile();
+        Prefs.deleteProfile(id);   // only its keys: no app is touched
+        if (wasActive) applyProfile();   // back to the Main profile's shelf first
+        profGo('list', Math.max(0, Prefs.profiles().indexOf(Prefs.profile())));
+        return;
+      }
+    }
+  }
+
+  /** ← → on Color (all eight, even one another profile has) and Starting tab. */
+  function stepProfile(dx) {
+    if (profMode !== 'one') return;
+    var r = profRows()[st.prof], n = Prefs.PROFILE_COLORS.length;
+    if (!r) return;
+    if (r.kind === 'color') Prefs.setProfileColor(profEdit, (Prefs.profileColor(profEdit) + dx + n) % n);
+    else if (r.kind === 'tab') {
+      Prefs.setProfileTab(profEdit, (Prefs.profileTab(profEdit) + dx + 3) % 3);
+      if (profEdit === Prefs.profile()) selectTab(Prefs.startTab());   // the home screen under the sheet starts there
+    } else return;
+    renderProfiles();
+  }
+
+  /** OK in the name field or on Save: a new profile (now the active one, owner 2026-11-02) or the new name. */
+  function saveProfileName() {
+    var f = fieldOf('profiles'), name = Prefs.cleanName(f ? f.value : '');
+    if (!name) { st.prof = 0; openField('profiles'); updateFocus(); return; }   // no letter or digit yet: nothing to save
+    if (profNaming === 'new') {
+      var chosen = Prefs.shelf();
+      var id = Prefs.createProfile(name, chosen ? chosen : shelf.map(function (a) { return a.id; }));   // a copy of this shelf
+      if (id < 0) return;
+      profEdit = id;
+      switchProfile(id);
+    } else {
+      Prefs.renameProfile(profEdit, name);
+    }
+    profGo('one', rowOf('name'));
+  }
+
+  function backProfiles() {
+    if (profMode === 'name') { profGo(profNaming === 'new' ? 'list' : 'one', profNaming === 'new' ? Prefs.profiles().length : rowOf('name')); return; }
+    if (profMode === 'delete') { profGo('one', rowOf('delete')); return; }
+    if (profMode === 'one') { profGo('list', Math.max(0, Prefs.profiles().indexOf(profEdit))); return; }
+    setClass($('profiles'), 'open', false);
+    openSettings();
+    for (var i = 0; i < rowsNow.length; i++) if (rowsNow[i].profile !== undefined) st.row = i;
+    updateFocus();
+  }
+
+  function shelfIds() { return shelf.map(function (a) { return a.id; }).join(','); }
+
+  function switchProfile(id) {
+    if (id === Prefs.profile()) return;
+    Prefs.setProfile(id);
+    applyProfile();
+  }
+
+  /**
+   * The active profile's shelf, All Apps without it and its starting tab, in place: nothing fetched, and the tiles are
+   * made again only when the apps differ (the same apps keep their nodes).
+   */
+  function applyProfile() {
+    var was = shelfIds();
+    pickShelf();
+    st.shelf = 0;
+    if (shelfIds() !== was) { shelfFirst = 0; renderShelf(); }
+    else revealShelf();
+    selectTab(Prefs.startTab());
+    toast(trf('Profile: {name}', {name: Prefs.profileName(Prefs.profile())}));
+    updateFocus();
   }
 
   // MARK: - Opening things
@@ -1427,6 +1647,9 @@
       case Z.ABOUT:
         closeAbout();
         return;
+      case Z.PROF:
+        activateProfiles();
+        return;
     }
   }
 
@@ -1496,6 +1719,10 @@
       case Z.KEY:
         if (dy) st.key = Math.max(0, Math.min(keyRows() - 1, st.key + dy));
         break;
+      case Z.PROF:
+        if (dy) st.prof = Math.max(0, Math.min(profRows().length - 1, st.prof + dy));
+        else if (dx) stepProfile(dx);
+        break;
     }
     updateFocus();
   }
@@ -1512,6 +1739,7 @@
     if (st.zone === Z.CITY) { closeCities(false); return; }
     if (st.zone === Z.KEY) { if (keyAsking) askRemoveKey(false); else closeKey(); return; }
     if (st.zone === Z.ABOUT) { closeAbout(); return; }
+    if (st.zone === Z.PROF) { backProfiles(); return; }
     if (sheetOpen()) { closeSheets(); return; }
     if (st.zone === Z.DRAWER) { closeDrawer(); return; }
     if (st.zone !== Z.SHELF && shelf.length) { st.zone = Z.SHELF; updateFocus(); return; }
@@ -1521,7 +1749,7 @@
   /** The pointer focuses what it's over (the Magic Remote, or a mouse when previewing). */
   function hover(node, zone, index) {
     node.onmouseover = function () {
-      if (saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT))) return;
+      if (saverOn || (sheetOpen() !== (zone === Z.APPS || zone === Z.SETTINGS || zone === Z.EDIT || zone === Z.LANG || zone === Z.CITY || zone === Z.KEY || zone === Z.ABOUT || zone === Z.PROF))) return;
       if (zone === Z.DRAWER && st.zone !== Z.DRAWER) return;
       if (zone !== Z.DRAWER && st.zone === Z.DRAWER && zone !== Z.SHELF) return;
       if (zone === Z.TOP && index < 3 && !Data.hasKey()) return;   // the tabs are hidden without the picks
@@ -1537,6 +1765,7 @@
       else if (zone === Z.LANG) st.lang = index;
       else if (zone === Z.CITY) st.city = index;
       else if (zone === Z.KEY) st.key = index;
+      else if (zone === Z.PROF) st.prof = index;
       updateFocus();
     };
     node.onclick = function () { node.onmouseover(); activate(); };
@@ -1719,9 +1948,9 @@
    * its Cancel or ↑ ↓ leave the field. Samsung's keyboard sends Done as 65376 and Cancel as 65385. True: handled here.
    */
   function typing(k) {
-    var sheet = st.zone === Z.CITY ? 'citypick' : st.zone === Z.KEY ? 'keypick' : '';
+    var sheet = st.zone === Z.CITY ? 'citypick' : st.zone === Z.KEY ? 'keypick' : st.zone === Z.PROF ? 'profiles' : '';
     if (!sheet || !typingIn(sheet)) return false;
-    if (k === TV.keys.ok || k === 65376) { if (st.zone === Z.CITY) searchCity(); else saveKey(); }
+    if (k === TV.keys.ok || k === 65376) { if (st.zone === Z.CITY) searchCity(); else if (st.zone === Z.PROF) saveProfileName(); else saveKey(); }
     else if (k === TV.keys.back || k === 27 || k === 65385) { closeField(sheet); updateFocus(); }
     else if (k === TV.keys.up || k === TV.keys.down) { closeField(sheet); move(0, k === TV.keys.up ? -1 : 1); }
     return true;   // anything else types into the field
@@ -1762,7 +1991,7 @@
     });
   }
 
-  /** Back to the home screen (the app was opened again): the shelf, everything closed, the first tab at its first pick. */
+  /** Back to the home screen (the app was opened again): the shelf, everything closed, the profile's tab at its first pick. */
   function reset() {
     hideSaver();
     hideAmbient();
@@ -1770,7 +1999,7 @@
     st.zone = Z.SHELF;
     st.shelf = 0;
     st.card = 0;
-    selectTab(0);
+    selectTab(Prefs.startTab());   // the profile's starting tab
     updateFocus();
     restInDrawer();   // drawer_first: out again at once, not only after the TV lists its apps
   }
