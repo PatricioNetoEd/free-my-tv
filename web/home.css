@@ -634,9 +634,11 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .look-new .key .label, .look-new .panel .side, .look-new #weather .range, .look-new #weather .hour .t,
 .look-new #weather .hour .low, .look-new #weather .sun, .look-new #prices .coin .c, .look-new .box .hint { font-size: 24px; }
 
-/* Nova's row (card 203, design/203): five 300 x 169 tiles from x = 96 at y = 820, radius 28, on the sky (no glass).
-   Each tile holds its focus shadow (.lift, by opacity) under its face (.art); focused, it grows 10% (today's focus at
-   Nova's scale, until card 204). At night a 1 px inner rim keeps dark tiles apart from the dark sky. */
+/* Nova's row (cards 203 and 204, design/203 and 204): five 300 x 169 tiles from x = 96 at y = 820, radius 28, on the
+   sky (no glass). Each tile holds its focus shadow (.lift) under its face (.art), and the face holds the sheen (under
+   the logo or name) and the focus rim (over them). Focused, it grows 10% and rises 6 px; the long shadow, the sheen and
+   the rim come in by opacity: only transform and opacity ever animate, never a box-shadow. At night a 1 px inner rim
+   keeps dark tiles apart from the dark sky. */
 .look-new #platter { background: none; box-shadow: none; border-radius: 0; pointer-events: none; }
 .look-new .more, .look-new.night .more { color: #7A7A80; }
 .look-new .tile, .look-new .tile.focus, .look-new.night .tile, .look-new.night .tile.focus {
@@ -644,28 +646,62 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   border-radius: 28px;
   box-shadow: none;
 }
+.look-new .tile {
+  -webkit-transition: -webkit-transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15), opacity 0.3s;
+  transition: transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15), opacity 0.3s;
+}
 .look-new .tile::after { display: none; }
-.look-new .tile.focus { -webkit-transform: scale(1.1); transform: scale(1.1); }
+/* A layer only for the focused tile, its shadow and its sheen: on every tile it would fill webOS 3's video memory. */
+.look-new .tile.focus { -webkit-transform: translateY(-6px) scale(1.1); transform: translateY(-6px) scale(1.1); will-change: transform; }
+.look-new .tile.focus .lift, .look-new .tile.focus .sheen { will-change: transform, opacity; }
 .tile .lift, .tile .art { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 28px; }
-.tile .lift { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34); opacity: 0; -webkit-transition: opacity 0.2s; transition: opacity 0.2s; }
-.night .tile .lift { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6); }
-.tile.focus .lift { opacity: 1; }
-.tile .art { overflow: hidden; box-shadow: 0 4px 22px rgba(0, 0, 0, 0.14); }
-.night .tile .art { box-shadow: 0 4px 22px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
-.tile .art::after {
-  content: '';
+.tile .lift, .tile .sheen {
+  opacity: 0;
+  -webkit-transition: opacity 0.18s ease-out, -webkit-transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  transition: opacity 0.18s ease-out, transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.tile .lift { box-shadow: 0 26px 44px rgba(0, 0, 0, 0.38); }
+.night .tile .lift { box-shadow: 0 26px 44px rgba(0, 0, 0, 0.62); }
+.tile .art { overflow: hidden; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16); }
+.night .tile .art { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.36), inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+/* The sheen: light from the top left, white 20% fading out at 55% of the tile's 135-degree line, in a box 8 px larger on
+   each side (so its stops are 3.2% and 54.7%) that the parallax moves under the face's rounded clip. */
+.tile .sheen {
+  position: absolute;
+  left: -8px;
+  top: -8px;
+  right: -8px;
+  bottom: -8px;
+  background: -webkit-linear-gradient(-45deg, rgba(255, 255, 255, 0.2) 3.2%, rgba(255, 255, 255, 0) 54.7%);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 3.2%, rgba(255, 255, 255, 0) 54.7%);
+}
+.tile .rim {
   position: absolute;
   left: 0;
   top: 0;
   right: 0;
-  height: 50%;
-  background: -webkit-linear-gradient(top, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
-  background: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+  bottom: 0;
+  border-radius: 28px;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.22);
   opacity: 0;
-  -webkit-transition: opacity 0.17s;
-  transition: opacity 0.17s;
+  -webkit-transition: opacity 0.18s ease-out;
+  transition: opacity 0.18s ease-out;
 }
-.tile.focus .art::after { opacity: 1; }
+.tile.focus .lift, .tile.focus .sheen, .tile.focus .rim { opacity: 1; }
+/* The parallax (home.js lean()): toward the last arrow for 160 ms, the sheen 8 px and the shadow 4 px, half at the
+   row's ends; the transition brings them back. */
+.look-new #tiles.lean-l .tile.focus .sheen { -webkit-transform: translateX(-8px); transform: translateX(-8px); }
+.look-new #tiles.lean-r .tile.focus .sheen { -webkit-transform: translateX(8px); transform: translateX(8px); }
+.look-new #tiles.lean-u .tile.focus .sheen { -webkit-transform: translateY(-8px); transform: translateY(-8px); }
+.look-new #tiles.lean-d .tile.focus .sheen { -webkit-transform: translateY(8px); transform: translateY(8px); }
+.look-new #tiles.lean-l .tile.focus .lift { -webkit-transform: translateX(-4px); transform: translateX(-4px); }
+.look-new #tiles.lean-r .tile.focus .lift { -webkit-transform: translateX(4px); transform: translateX(4px); }
+.look-new #tiles.lean-u .tile.focus .lift { -webkit-transform: translateY(-4px); transform: translateY(-4px); }
+.look-new #tiles.lean-d .tile.focus .lift { -webkit-transform: translateY(4px); transform: translateY(4px); }
+.look-new #tiles.lean-l.lean-half .tile.focus .sheen { -webkit-transform: translateX(-4px); transform: translateX(-4px); }
+.look-new #tiles.lean-r.lean-half .tile.focus .sheen { -webkit-transform: translateX(4px); transform: translateX(4px); }
+.look-new #tiles.lean-l.lean-half .tile.focus .lift { -webkit-transform: translateX(-2px); transform: translateX(-2px); }
+.look-new #tiles.lean-r.lean-half .tile.focus .lift { -webkit-transform: translateX(2px); transform: translateX(2px); }
 .tile .mark { position: absolute; background-repeat: no-repeat; background-position: 0 0; }
 .look-new .tile img { max-width: 72%; max-height: 50%; }
 .look-new .tile .word { left: 10%; right: 10%; margin-top: -24px; height: 48px; line-height: 48px; }
@@ -701,7 +737,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 /* Tizen 2 and 1 GB TVs (see tv.js): no shadows or animations; their GPUs can't keep up while the focus moves. */
 .lite * { box-shadow: none !important; -webkit-transition: none !important; transition: none !important; }
 /* Nova's tiles there: no shadow, glow or text shadow; a 3 px white ring on the focused one, a 1 px border at night. */
-.lite .tile .lift, .lite .tile .art::after { display: none; }
+.lite .tile .lift, .lite .tile .sheen, .lite .tile .rim { display: none; }
+.lite .look-new .tile.focus { will-change: auto; }
 .lite .look-new .tile .word.shade { text-shadow: none; }
 .lite .night .tile .art::before, .lite .tile.focus .art::before {
   content: '';
@@ -719,7 +756,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 /* Samsungs up to 2 GB (see tv.js): the parts that move lose their soft shadows, which the TV repainted on every frame of
    a move, and what slides is a layer from the start, so a move starts at once. */
 .flat .tab, .flat .card .img, .flat .tile, .flat .key { box-shadow: none !important; }
-.flat .tile .lift { -webkit-transition: none; transition: none; }
+.flat .tile .lift, .flat .tile .sheen, .flat .tile .rim { -webkit-transition: none; transition: none; }
 .flat .cell.focus .face { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.4) !important; }
 .flat #home, .flat #drawer, .flat #cards, .flat .card, .flat #tiles, .flat .tile { will-change: transform; }
 .flat #top { will-change: opacity; }
