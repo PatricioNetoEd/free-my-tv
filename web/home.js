@@ -90,6 +90,13 @@
   // Apps shown at once, as on Android: 8 (today's smallest tiles, 178 wide); the shelf scrolls for the rest. The
   // built-in list keeps 8 too.
   var SHELF_VISIBLE = 8, FEW_APPS = 8;
+  // Nova (card 203): five 300 x 169 tiles from x = 96, 57 apart, at y = 820 (design/203), without the glass.
+  var ROW_VISIBLE = 5, ROW_TILE = 300, ROW_TILE_H = 169, ROW_STEP = 357, ROW_TOP = 820;
+  // Nova's names on their tiles (no logo): the brand's ink (white when not here), and a shadow on light gradients.
+  var NAME_INK = {netflix: '#E50914', appletv: '#B8BCC6', clarotv: '#E3262E', hulu: '#1D1D1F'};
+  var NAME_SHADE = {prime: true, globoplay: true, spotify: true, jellyfin: true};
+
+  function shelfVisible() { return nova() ? ROW_VISIBLE : SHELF_VISIBLE; }
 
   function shelfKey(app) {
     for (var i = 0; i < SHELF.length; i++) if (SHELF[i][1].test(app.id) || SHELF[i][2].test(app.title)) return SHELF[i];
@@ -103,9 +110,9 @@
     return 'rgb(' + Math.round(r * f) + ',' + Math.round(g * f) + ',' + Math.round(b * f) + ')';
   }
 
-  /** A name that fits the tile on one line (the font shrinks for long names). */
-  function wordFit(title, width, max) {
-    return Math.max(18, Math.min(max, Math.floor(width * 0.8 / (Math.max(4, title.length) * 0.56))));
+  /** A name that fits the tile on one line (the font shrinks for long names, down to min, then it's cut). */
+  function wordFit(title, width, max, min) {
+    return Math.max(min || 18, Math.min(max, Math.floor(width * 0.8 / (Math.max(4, title.length) * 0.56))));
   }
 
   // MARK: - Logos
@@ -196,9 +203,10 @@
     crop.height = maxY - minY + 1;
     g.putImageData(data, 0, 0);
     crop.getContext('2d').drawImage(canvas, minX, minY, crop.width, crop.height, 0, 0, crop.width, crop.height);
+    var fill = inkSum / (crop.width * crop.height);
     for (var b = 0; b < 8; b++) ink[b] /= inkSum;
     try {
-      return {src: crop.toDataURL('image/png'), bg: best, ink: ink};
+      return {src: crop.toDataURL('image/png'), bg: best, ink: ink, w: crop.width, h: crop.height, fill: fill};
     } catch (e2) {
       return false;
     }
@@ -245,12 +253,35 @@
     for (var i = 0; i < imgs.length; i++) if (imgs[i].complete) fitLogo(imgs[i]);
   }
 
-  /** own: the tile has the TV's color for the app, not one of SHELF's. */
-  function showLogo(img, box, top, bottom, logo, own) {
-    img.className = 'logo';
-    img.onload = function () { img.onload = null; fitLogo(img); };
-    img.src = logo.src;
-    if (img.complete) fitLogo(img);
+  /**
+   * Nova's logo (card 203): with the same amount of ink on every tile (14% of it), never past 72% x 50% of it, as on
+   * Android. Sized once, in whole pixels, as a background image: no object-fit (WebKit 538) and no scaling per frame.
+   */
+  function showMark(img, box, logo, tile) {
+    var lw = logo.w || 1, lh = logo.h || 1;
+    var s = Math.sqrt(tile.w * tile.h * 0.14 / (lw * lh * Math.max(0.08, logo.fill || 1)));
+    s = Math.min(s, tile.w * 0.72 / lw, tile.h * 0.5 / lh);
+    var w = Math.max(1, Math.round(lw * s)), h = Math.max(1, Math.round(lh * s));
+    var m = el('div', 'mark', box);
+    m.style.backgroundImage = 'url("' + logo.src + '")';
+    m.style.backgroundSize = w + 'px ' + h + 'px';
+    m.style.width = w + 'px';
+    m.style.height = h + 'px';
+    m.style.left = Math.round((tile.w - w) / 2) + 'px';
+    m.style.top = Math.round((tile.h - h) / 2) + 'px';
+    if (img.parentNode) img.parentNode.removeChild(img);
+  }
+
+  /** own: the tile has the TV's color for the app, not one of SHELF's. tile: Nova's size, for showMark. */
+  function showLogo(img, box, top, bottom, logo, own, tile) {
+    if (tile) {
+      showMark(img, box, logo, tile);
+    } else {
+      img.className = 'logo';
+      img.onload = function () { img.onload = null; fitLogo(img); };
+      img.src = logo.src;
+      if (img.complete) fitLogo(img);
+    }
     var a = rgbOf(top), z = rgbOf(bottom);
     var tileLum = (luminance(a[0], a[1], a[2]) + luminance(z[0], z[1], z[2])) / 2;
     // The tile takes the icon's background when the logo only reads on it, and when that background is the brand's
@@ -262,24 +293,31 @@
     }
   }
 
-  /** An app's face: its logo on its brand color (or its name, when the icon can't be read). */
-  function face(app, box, wordSize) {
+  /**
+   * An app's face: its logo on its brand color (or its name, when the icon can't be read). tile: Nova's shelf tile
+   * size ({w, h}): the logo as a background image (showMark), the name in its brand's ink.
+   */
+  function face(app, box, wordSize, tile) {
     var k = shelfKey(app);
     var top = k ? k[3][0] : app.color ? darken(app.color, 0.92) : '#2A2A2E';
     var bottom = k ? k[3][1] : app.color ? darken(app.color, 0.62) : '#161618';
     paint(box, top, bottom);
     var word = el('div', 'word', box, app.title);
     if (wordSize) word.style.fontSize = wordSize + 'px';
+    if (tile && k) {
+      if (NAME_INK[k[0]]) word.style.color = NAME_INK[k[0]];
+      if (NAME_SHADE[k[0]]) word.className += ' shade';
+    }
     if (app.icon) {
       var img = el('img', '', box), url = app.icon;
       word.style.visibility = 'hidden';
       img.onerror = function () { if (img.parentNode) img.parentNode.removeChild(img); word.style.visibility = ''; };
-      if (lifted[url]) { showLogo(img, box, top, bottom, lifted[url], !k); return; }
+      if (lifted[url]) { showLogo(img, box, top, bottom, lifted[url], !k, tile); return; }
       if (lifted[url] !== false) {
         img.onload = function () {
           img.onload = null;
           if (lifted[url] === undefined) lifted[url] = lift(img);
-          if (lifted[url]) showLogo(img, box, top, bottom, lifted[url], !k);
+          if (lifted[url]) showLogo(img, box, top, bottom, lifted[url], !k, tile);
         };
       }
       img.src = url;
@@ -544,6 +582,7 @@
   var shelfFirst = 0, tileStep = 0, tileLeft = 0;
 
   function renderShelf() {
+    if (nova()) { renderRow(); return; }
     var n = Math.min(shelf.length, SHELF_VISIBLE), gap = 48, pad = 40;
     // 16:9 tiles, as on Android: never taller than 126, and the glass keeps its bottom edge.
     // Nova keeps the glass, not only the tiles, inside the safe area.
@@ -583,9 +622,50 @@
     placeTiles();
   }
 
+  /**
+   * Nova's row (design/203): five tiles from the margin, no glass (#platter only holds the arrows, at the screen's
+   * sides). Each tile is the focus shadow (.lift, shown by opacity) under the face (.art): only opacity and transform
+   * change when the focus moves.
+   */
+  function renderRow() {
+    var n = Math.min(shelf.length, ROW_VISIBLE), tile = {w: ROW_TILE, h: ROW_TILE_H};
+    var platter = $('platter');
+    platter.style.display = n ? '' : 'none';
+    platter.style.left = '0px';
+    platter.style.width = '1920px';
+    platter.style.top = ROW_TOP + 'px';
+    platter.style.height = ROW_TILE_H + 'px';
+    $('quotes').style.right = (1920 - contentR()) + 'px';
+    var tiles = $('tiles');
+    tiles.innerHTML = '';
+    tileStep = ROW_STEP;
+    tileLeft = marginX();
+    shelfFirst = Math.max(0, Math.min(shelfFirst, shelf.length - n));
+    for (var i = 0; i < shelf.length; i++) {
+      var t = el('div', 'tile', tiles);
+      t.style.top = ROW_TOP + 'px';
+      t.style.width = ROW_TILE + 'px';
+      t.style.height = ROW_TILE_H + 'px';
+      el('div', 'lift', t);
+      face(shelf[i], el('div', 'art', t), wordFit(shelf[i].title, ROW_TILE, 40, 24), tile);
+      hover(t, Z.SHELF, i);
+    }
+    // "More" arrows, 24 px, at x 54-78 and 1842-1866, on the tiles' middle (card 206 moves them over the row).
+    platter.innerHTML = '';
+    for (var a = 0; a < 2; a++) {
+      var arrow = sym('chevron_right', platter, 24);
+      arrow.className += a ? ' more' : ' more back';
+      arrow.style.left = (a ? 1842 : 54) + 'px';
+      arrow.style.top = (ROW_TILE_H / 2 - 12) + 'px';
+    }
+    st.shelf = Math.min(st.shelf, Math.max(0, shelf.length - 1));
+    placeTiles();
+    revealShelf();
+  }
+
   /** The row slides (a transform on #tiles, which old TVs animate), and the apps it takes past the glass fade out. */
   function placeTiles() {
-    var row = $('tiles'), tiles = row.children, n = Math.min(shelf.length, SHELF_VISIBLE);
+    var row = $('tiles'), tiles = row.children, n = Math.min(shelf.length, shelfVisible());
     for (var i = 0; i < shelf.length; i++) {
       var shown = i >= shelfFirst && i < shelfFirst + n;
       tiles[i].style.left = (tileLeft + i * tileStep) + 'px';
@@ -600,7 +680,7 @@
 
   /** Scrolls the shelf, one app at a time, so the focused app is shown. */
   function revealShelf() {
-    var n = Math.min(shelf.length, SHELF_VISIBLE);
+    var n = Math.min(shelf.length, shelfVisible());
     var first = Math.max(0, Math.min(Math.max(shelfFirst, st.shelf - n + 1), Math.min(st.shelf, shelf.length - n)));
     if (first === shelfFirst || !shelf.length) return;
     shelfFirst = first;
