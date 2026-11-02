@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Nova · protótipo da tela inicial (card 200)</title>
+<link rel="stylesheet" href="proto.css">
+</head>
+<body>
+<div id="bar">
+  <b>Nova · protótipo</b>
+  <button id="bNight" type="button">Dia/Noite (N)</button>
+  <button id="bPerf" type="button">Modo: normal (L)</button>
+  <button id="bKey" type="button">Chave TMDB: sim (K)</button>
+  <button id="bApps" type="button">Apps: 10 (A)</button>
+  <button id="bCont" type="button">Continuar assistindo: sim (C)</button>
+  <button id="b720" type="button">1280×720 (R)</button>
+  <button id="bProf" type="button">Perfil: Ana (P)</button>
+  <button id="bAlone" type="button">Perfis: 3 (U)</button>
+  <button id="bStart" type="button">Ligar a TV (O)</button>
+  <button id="bSpeed" type="button">Velocidade (V)</button>
+  <span class="help">Setas movem · Enter = OK · Esc/Backspace = Voltar</span>
+</div>
+<div id="view">
+  <div id="stage">
+    <div id="sky" class="layer"><div class="s day"></div><div class="s night"></div><div class="lift"></div></div>
+    <div id="home" class="layer">
+      <div id="band">
+        <div class="art" id="artA"></div>
+        <div class="art" id="artB"></div>
+        <div class="scrim top"></div>
+        <div class="scrim left"></div>
+        <div class="fade day"></div>
+        <div class="fade night"></div>
+        <div class="logo" id="logoA"></div>
+        <div class="logo" id="logoB"></div>
+      </div>
+      <div id="hero">
+        <div class="text">
+          <div class="eyebrow"></div>
+          <div class="title"></div>
+          <div class="meta"></div>
+          <div class="progress"><i></i></div>
+        </div>
+        <div class="action"></div>
+        <div class="dots"></div>
+      </div>
+      <div id="topbar">
+        <div id="lefts"><div id="tabs"></div><div id="info"></div></div>
+        <div id="buttons"></div>
+        <div id="clock"></div>
+      </div>
+      <div id="row">
+        <div class="chev l"></div>
+        <div class="chev r"></div>
+        <div id="tiles"></div>
+      </div>
+    </div>
+    <div id="drawer" class="layer"></div>
+    <div id="apps" class="layer sheet"><h2>Todos os Apps</h2><div class="grid"></div></div>
+    <div id="profiles" class="layer sheet" role="dialog" aria-label="Quem está assistindo?"><h2>Quem está assistindo?</h2><div class="who-list"></div></div>
+    <div id="toast"></div>
+    <div id="sr" class="sr" aria-live="polite"></div>
+  </div>
+</div>
+<script src="proto.js"></script>
+</body>
+</html>

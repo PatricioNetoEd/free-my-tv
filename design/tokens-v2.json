@@ -1,0 +1,416 @@
+{
+  "$schema_note": "Tokens of the 'Nova' look (card 200; cards 202-213 build it). tokens.json (v1) stays the source of the Classic look and of the brands; this file only adds Nova and points to v1 where a value is shared. Units: px at 1920x1080 unless named; a 1280x720 UI uses every px value times 2/3 (layout.720p lists the ones that matter). Every heavy effect names its light fallback for the six render paths in 'paths'. Owner decisions of 2026-10-31 and the adjustments after the prototype (2026-11-01: Inter, the TV info line instead of the quotes, Continue Watching and picks in one band carousel, gold instead of red, the kids profile mark) rule (plan/200 and plan/214, last sections).",
+  "version": 2,
+  "name": "Nova",
+  "extends": "design/tokens.json (version 1, unchanged: Classic look and brand table)",
+  "rules": {
+    "min_text_px_1080p": 24,
+    "min_text_px_720p": 16,
+    "safe_area_percent": 5,
+    "contrast": "WCAG AA: 4.5:1 for UI text (checked against the worst case: a pure white photo under the scrims), 3:1 for graphics and large text; brand logotypes exempt but legible",
+    "focus": "visible by scale and brightness (white surface, sheen), never by color alone",
+    "max_levels_to_an_app": 3,
+    "heavy_effects_min_android": 13,
+    "animate_only": "transform and opacity (web); Android: springs on position/scale/alpha, nothing re-rasterized per frame",
+    "name_on_screen": "Nova (never tvOS or any Apple mark)"
+  },
+
+  "paths": {
+    "android13": "Android 13+ and not Ui.LEGACY: RenderNode layers, AGSL glass (Shaders/Scene), cached shadows inside the layer",
+    "android8_12": "Android 9-12 with >= 3 GB (not LEGACY): RenderNode layers, no AGSL; glass = Backdrop's pre-blurred copy + tint",
+    "legacy": "Ui.LEGACY (Android 8-11, and 12/12L under 3 GB; the TCL target): no GPU layers, shadows from Shadows' nine-slice cache, solid glass, RGB_565 photos",
+    "web": "LG/Samsung, normal: rgba glass, static box-shadow on a separate element whose opacity animates",
+    "web_flat": "Samsung up to 2 GB (class flat): static shadows only, no shadow animation, layers only on what slides",
+    "web_lite": "Tizen 2.x and 1 GB LGs (class lite): no shadows, no transitions, no sheen, solid glass, w780 photos"
+  },
+
+  "font": {
+    "$note": "Nova uses Inter, the font the app already ships (owner, 2026-11-01): app/assets/fonts/InterVariable.ttf (OFL, OFL.txt beside it). Nothing downloaded. Classic keeps Inter too.",
+    "file": "app/assets/fonts/InterVariable.ttf (variable: wght 100-900, opsz 14-32)",
+    "android": {
+      "how": "Ui.font(): Typeface.Builder(assets, fonts/InterVariable.ttf).setFontVariationSettings(\"'opsz' N, 'wght' W\") (API 26, so Android 8 too); the system font only if the file is missing",
+      "instances": { "text_opsz14": "Ui.regular 400, Ui.medium 500, Ui.semibold 600 (text 24-34 px)", "display_opsz32": "Ui.displayMedium 500, Ui.displaySemibold 600 (clock, sheet titles, profile letters), Ui.light 300 (weather temperature)", "new": "displayBold (opsz 32, wght 700) for the band title and the tile word: one more Typeface made once in Ui.init" },
+      "numbers": "tabular figures: Paint.setFontFeatureSettings(\"tnum\") (Ui.numbers)",
+      "cjk_devanagari": "system font, as today (Inter has no such glyphs)"
+    },
+    "web": {
+      "family": "'Inter', 'LG Smart UI', 'SamsungOne', 'Samsung Sans', Roboto, 'Helvetica Neue', Arial, sans-serif",
+      "face": "@font-face { font-family: 'Inter'; src: url('fonts/InterVariable.ttf') format('truetype'); font-weight: 100 900; } as web/home.css already has (tools/webapp.py packs app/assets/fonts into fonts/)",
+      "old_chromium": "Chrome < 62 (webOS 3 and 4, Tizen 3) has no variable fonts: it draws the default instance (400) and synthesizes bold for >= 600, as web/ does today",
+      "numbers": "font-feature-settings: 'tnum' (with -webkit-)",
+      "prototype": "design/prototype/proto.css points @font-face at ../../app/assets/fonts/InterVariable.ttf (the repo's own file; web/ has no copy, the build copies it). Opened from file://, Chrome and Safari load it; Firefox refuses a file in a parent folder and lands on the fallback stack"
+    }
+  },
+
+  "type": {
+    "$note": "size px @1080 / weight / line-height. Every UI text >= 24 px.",
+    "band_title":      { "size": 80, "weight": 700, "line": 1.04, "max_lines": 2, "max_width": 960, "tracking": "-0.01em" },
+    "band_title_long": { "size": 64, "weight": 700, "line": 1.06, "when": "title wider than max_width at 80 px on two lines" },
+    "band_eyebrow":    { "size": 26, "weight": 600, "line": 1.2 },
+    "band_meta":       { "size": 28, "weight": 500, "line": 1.3 },
+    "band_action":     { "size": 28, "weight": 600 },
+    "tab":             { "size": 28, "weight": 500, "selected_weight": 600 },
+    "clock":           { "size": 34, "weight": 600, "numbers": "tnum" },
+    "button_tip":      { "size": 24, "weight": 600 },
+    "info_line":       { "size": 24, "weight": 500, "numbers": "tnum", "note": "the TV info line next to the tabs (replaces the quotes in Nova)" },
+    "tile_word":       { "size_max": 40, "size_min": 24, "weight": 700, "note": "only when there is no logo: the name fitted to 80% of the tile width" },
+    "group_title":     { "size": 26, "weight": 600 },
+    "key_label":       { "size": 24, "weight": 500 },
+    "panel_head":      { "size": 26, "weight": 600 },
+    "weather_temp":    { "size": 96, "weight": 300, "numbers": "tnum" },
+    "panel_body":      { "size": 28, "weight": 500 },
+    "panel_small":     { "size": 24, "weight": 500 },
+    "sheet_title":     { "size": 40, "weight": 600 },
+    "grid_label":      { "size": 24, "weight": 500 },
+    "toast":           { "size": 26, "weight": 500, "line": 1.3 }
+  },
+
+  "color": {
+    "day": {
+      "sky":            { "value": "#ECECF0", "note": "the screen below and around the band" },
+      "ink":            { "value": "#1D1D1F", "contrast_on_sky": 14.28 },
+      "ink_secondary":  { "value": "#5A5A5F", "contrast_on_sky": 5.82, "note": "v1's #6E6E73 is 4.27:1 on its sky; Nova darkens it" },
+      "ink_graphic":    { "value": "#7A7A80", "contrast_on_sky": 3.62, "note": "row chevrons" },
+      "key_off":        { "value": "#6A6A70", "contrast": 5.25 }
+    },
+    "night": {
+      "sky":            { "value": "#0C0C0F" },
+      "ink":            { "value": "#F5F5F7", "contrast_on_sky": 17.94 },
+      "ink_secondary":  { "value": "#A1A1A6", "contrast_on_sky": 7.59 },
+      "ink_graphic":    { "value": "#7A7A80", "contrast_on_sky": 4.58 },
+      "key_off":        { "value": "rgba(255,255,255,0.5)", "contrast": 5.06 }
+    },
+    "band": {
+      "$note": "The band is a photo in both looks: its text is always white on scrims, day and night.",
+      "text":           { "value": "#FFFFFF", "contrast_worst": 6.2 },
+      "text_secondary": { "value": "rgba(255,255,255,0.86)", "contrast_worst": 5.1 },
+      "dot_on":         { "value": "#FFFFFF" },
+      "dot_off":        { "value": "rgba(255,255,255,0.56)", "contrast_worst": 3.18 },
+      "tab_off":        { "value": "rgba(255,255,255,0.78)", "contrast_worst": 10.68 },
+      "tab_selected_capsule": { "value": "rgba(255,255,255,0.16)" },
+      "info":           { "value": "rgba(255,255,255,0.78)", "contrast_worst": 10.68, "note": "the TV info line, as tab_off" },
+      "info_failed":    { "value": "#FFFFFF", "note": "failure and no-network text: full white plus a 20 px warning glyph (not by color alone)" },
+      "progress_track": { "value": "rgba(255,255,255,0.30)" },
+      "progress_fill":  { "value": "#FFFFFF" }
+    },
+    "focus_surface": { "value": "#FFFFFF", "ink": "#1D1D1F", "contrast": 16.83, "note": "focused tab, round button, band action pill, drawer key" },
+    "up": { "day": "#248A3D", "night": "#30D158" },
+    "down": { "day": "#D70015", "night": "#FF453A" },
+    "day_night": "Data.isNight / HomeView's night: dark from sunset to sunrise, as today (owner decision 4)"
+  },
+
+  "layout": {
+    "1080p": {
+      "stage": [1920, 1080],
+      "safe_area": { "x": 96, "top": 60, "bottom": 60, "content": [96, 60, 1824, 1020], "note": "5% of 1920 and a bit more than 5% of 1080. Text and focusable items stay inside; photos and scrims are full-bleed" },
+      "grid": { "columns": 5, "column": 300, "gutter": 57, "width": 1728, "note": "the 5 tiles span the safe width exactly; hero text, row, drawer and All Apps align to x=96" },
+      "top_bar": { "y": 60, "h": 64, "tabs_x": 96, "tab_h": 56, "tab_pad_x": 24, "tab_gap": 8, "info_gap": 32, "info_sep": " · ", "speed_h": 56, "speed_pad_x": 20, "speed_progress": [120, 4], "info_min_gap_to_buttons": 32, "button": 64, "button_gap": 20, "clock_right": 1824, "clock_gap": 32, "tip_y": 150 },
+      "band": { "image": [0, 0, 1920, 820], "fade_y": [640, 820], "text_x": 96, "text_max_w": 960, "eyebrow_baseline": 410, "title_last_baseline": 500, "meta_baseline": 552, "action_y": 584, "action_h": 56, "dots_y": 612, "dot": 10, "dot_gap": 14 },
+      "row": { "y": 820, "tile": [300, 169], "gap": 57, "visible": 5, "chevron_y": 770, "chevron": 24, "note": "left-aligned at x=96 (3 apps: three tiles on the left, no centering)" },
+      "drawer": { "shift": 560, "group_title_baseline": 500, "keys_y": 520, "key_h": 140, "key_w_max": 240, "key_gap": 18, "group_gap": 56, "panels_y": 704, "panel_h": 300, "panel_gap": 32 },
+      "all_apps": { "title_y": 84, "grid_x": 96, "grid_y": 184, "cell": [300, 169], "col_step": 357, "row_step": 240, "label_dy": 186, "visible_rows": 3.5 }
+    },
+    "720p": {
+      "$note": "TCL 1 GB (UI drawn at 1280x720): every value x 2/3, rounded; bitmaps are built at these sizes, never at 1080p.",
+      "safe_area": { "x": 64, "top": 40, "bottom": 40 },
+      "grid": { "column": 200, "gutter": 38 },
+      "tile": [200, 113],
+      "tile_focus": [220, 124],
+      "band_image": [1280, 547],
+      "band_title": 53, "band_meta": 19, "min_text": 16,
+      "info_line": 16, "speed_h": 37, "speed_pad_x": 13, "speed_progress": [80, 3], "kids_badge_sheet": 29, "kids_badge_button": 15,
+      "drawer_shift": 373
+    }
+  },
+
+  "tile": {
+    "rest": [300, 169],
+    "focus_scale": 1.10,
+    "focus": [330, 186],
+    "focus_lift_y": -6,
+    "radius": 28,
+    "radius_note": "about 17% of the height, the proportion v1 keeps (22 on 126); 19 at 720p",
+    "art": "logo on the brand gradient (owner decision 2), the same on Google TV, LG and Samsung: gradient = tokens.json brand.<key>.tile (top, bottom), else the brand color darkened; logo lifted as today (HomeView.crispLogo, web lift())",
+    "logo_box": { "max_width": 0.72, "max_height": 0.50, "ink_area": 0.14, "note": "v1 is 0.76/0.58/0.085 on a 224x126 tile; Nova's tile is twice the area, so the logo grows from ~2.4k to ~7.1k px of ink without touching the edges" },
+    "no_logo": "the app name in type.tile_word on the gradient; on light gradients (Prime, Globoplay, Spotify) a static 0 1px 2px rgba(0,0,0,0.35) text shadow (lite: none; the word sits mid-gradient, 3.1-3.7:1)",
+    "cache": "rest and focus bitmaps at exactly 300x169 and 330x186 (720p: 200x113, 220x124); the same pair serves All Apps' cells, which use the same sizes. ~0.45 MB per app ARGB; LEGACY may use RGB_565 for opaque gradients",
+    "night_rim": "at night a 1 px inner rim, white 0.10 (lite: 1 px border white 0.14), so dark tiles (Netflix, YouTube, Claro tv+) keep their edge on the dark sky",
+    "reorder": "hold OK: scale 1.10 + lift 12 + wiggle 1.5 deg (v1 HomeView LIFT/WIGGLE), unchanged"
+  },
+
+  "elevation": {
+    "tile_rest":   { "offset_y": 6,  "blur": 16, "alpha_day": 0.16, "alpha_night": 0.36 },
+    "tile_focus":  { "offset_y": 26, "blur": 44, "alpha_day": 0.38, "alpha_night": 0.62 },
+    "key_focus":   { "offset_y": 16, "blur": 34, "alpha_day": 0.30, "alpha_night": 0.50 },
+    "pill_focus":  { "offset_y": 10, "blur": 24, "alpha": 0.30 },
+    "sheet":       { "offset_y": 40, "blur": 90, "alpha": 0.60 },
+    "fallback": {
+      "android13":   "the two shadows as Shadows bitmaps (nine-slice, made once per size) drawn in the tile's RenderNode; focus crossfades rest->focus by alpha",
+      "android8_12": "same as android13",
+      "legacy":      "Shadows bitmaps only (never BlurMaskFilter per frame); only the focused tile draws the focus shadow",
+      "web":         "rest: static box-shadow on .face; focus: a separate .shadow element with the focus box-shadow, opacity 0->1 (never a box-shadow transition)",
+      "web_flat":    "rest and focus shadows static; the focus shadow shows at once (no opacity transition)",
+      "web_lite":    "no shadows"
+    }
+  },
+
+  "focus": {
+    "sheen": { "gradient": "white 0.20 at the top -> 0 at 55% of the height", "rim": "1.5 px inner stroke, white 0.22", "only": "focused tile/card" },
+    "parallax": { "sheen_px": 8, "shadow_px": 4, "direction": "the last arrow pressed; springs back to 0", "paths": "on in android13, android8_12 and web (a translate of cached bitmaps); off in legacy, web_flat and web_lite" },
+    "dim_others": "none: unfocused tiles stay at full opacity (no full-row repaint when the focus moves)",
+    "fallback": {
+      "android13":   "sheen = LinearGradient made once per tile size (like watchSheen); rim stroke; parallax spring per zone",
+      "android8_12": "same, without AGSL",
+      "legacy":      "sheen and rim yes (cheap, cached shader), no parallax",
+      "web":         ".sheen element: opacity and translateX animate",
+      "web_flat":    "sheen at once, no parallax",
+      "web_lite":    "no sheen: focus = scale 1.10 + white 3 px ring (box-shadow none; an inner border on .face), brightness by the ring"
+    }
+  },
+
+  "band": {
+    "height": 820,
+    "content_order_for_focused_app": [
+      "one carousel, one set of dots: first this app's Continue Watching (WatchNext; only when on in Home Settings; Android only), at most 3, most recent first; then the picks already downloaded whose service is this app (Recs.Pick.app / web SERVICES), at most 5, in Recs order (at most 8 dots)",
+      "the tab filters both: Explore = all, Movies = movie, Shows = tv (Continue items by their WatchNext type; an item with no type, a YouTube video, shows in every tab)",
+      "a pick that is also a Continue item (same TMDB id, else the same title) shows once, as Continue",
+      "the action pill says 'Continuar' on Continue items and 'Assistir' on picks; Continue items also show the progress bar",
+      "neither: the app's art: the brand gradient full-bleed + the lifted logo large, and the app name as the title (the band takes no focus)"
+    ],
+    "no_tmdb_key": "no picks: Continue Watching, else the app's art. The tabs are hidden (nothing to filter)",
+    "kids_profile": "on a profile marked kids, the picks come from the kids list (profile.kids); Continue Watching is unchanged (owner, 2026-11-01)",
+    "no_favorites": "general picks (card 206); without picks, one of your photos (Photos), else the aurora (Scene)",
+    "follow_delay_ms": 500,
+    "follow_note": "as BG_FOLLOW_MS: nothing is decoded until the focus rests 500 ms on a tile; a newer request cancels the older (generation)",
+    "crossfade_ms": 420,
+    "text_swap": { "out_ms": 120, "in_ms": 200 },
+    "auto_advance": "none (no decode without a key press)",
+    "scrims": {
+      "top":    { "stops": [[0, 0.66], [200, 0.58], [340, 0]], "unit": "px from the top, black alpha", "why": "clock and tips >= 5.4:1 on a white photo" },
+      "left":   { "stops": [[0, 0.75], [0.55, 0.62], [0.90, 0]], "unit": "fraction of 1920, black alpha", "why": "title >= 6.2:1 up to x=1056 on a white photo" },
+      "bottom_fade": { "from_y": 640, "to_y": 820, "to": "color.day.sky / color.night.sky" }
+    },
+    "art_from_app": { "gradient": "brand tile (top, bottom), 160deg", "logo": "lifted logo, height up to 240, right half, centered at x=1340 y=360; only on android/web; the prototype draws the name in type instead" },
+    "images": {
+      "max_alive": 2,
+      "size": "TMDB w1280 (already fetched today; no new endpoint, no new domain)",
+      "legacy_config": "RGB_565 (1.8 MB each; ARGB 3.7 MB)",
+      "web": "w1280; web_lite w780",
+      "decode": "LOADER thread, Bitmap.prepareToDraw() before the swap",
+      "app_art": "no photo: gradient shader + one logo bitmap (<= 640x240, ~0.6 MB), kept for the current and the previous app only"
+    },
+    "fallback": {
+      "android13":   "sharp photo + scrim shaders (made once per size) + crossfade by alpha",
+      "android8_12": "same",
+      "legacy":      "same, RGB_565; the scrims are one combined bitmap-free LinearGradient pair; crossfade 420 ms",
+      "web":         "two stacked divs with background-image, opacity crossfade; scrims are static linear-gradient divs",
+      "web_flat":    "same",
+      "web_lite":    "w780, crossfade off (swap at once)"
+    }
+  },
+
+  "tabs": {
+    "role": "a quiet filter of the band (owner decision 5): Explore / Movies / Shows",
+    "place": "top bar, left, at x=96 over the band's top scrim",
+    "rest": "white 0.78, weight 500, no surface",
+    "selected": "white, weight 600, capsule white 0.16 (not by color alone: weight + capsule)",
+    "focused": "white surface, ink #1D1D1F, scale 1.06, pill_focus shadow",
+    "behavior": "focusing a tab selects it (as today); the band re-filters once the focus rests follow_delay_ms (running past the tabs decodes nothing); Down before that applies it at once",
+    "hidden_when": "no TMDB key (as today)"
+  },
+
+  "top_bar": {
+    "order_right_to_left": ["clock (not focusable)", "Profile (profile.button; Nova only)", "Settings", "HDMI Inputs", "Live TV", "Top Buttons extras and Recent Apps (HomeApps.MAX_TOP)", "Now Playing capsule (when allowed and playing)", "status icons (when on)", "tv_info line (left, right after the tabs; replaces the quotes in Nova)"],
+    "button": "64 px circle, glass.thin, white symbol 28 px; focused: white surface, dark symbol, scale 1.12, tip below (type.button_tip) over the top scrim",
+    "clock": "type.clock, white, right edge at 1824, centered on the bar",
+    "focus_order": "one line, left to right, no wrap: tabs (when there is a TMDB key) -> speed -> extras -> Live TV -> Inputs -> Settings -> Profile; the clock and the rest of the info line take no focus"
+  },
+
+  "tv_info": {
+    "$note": "Owner, 2026-11-01: quotes leave Nova (they stay in Classic when on); in their place, next to the tabs, a line about the TV: city · temperature · resolution · refresh · last speed test and when. Example: 'São Paulo · 24 °C · 4K · 60 Hz · ↓ 230 Mbps · há 2 h'.",
+    "parts": {
+      "city": "Config/Place city (config.properties or the time zone in --generic); never GPS or IP geolocation",
+      "temperature": "the forecast the app already fetches (HomeData / web Data), rounded, with its unit ('{t} °C'; °F when the build's temperature setting says F, as the weather panel); hidden until the first forecast arrives",
+      "resolution": "Android: Display.getMode() physical size -> 8K / 4K / 1080p / 720p, refresh rounded ('60 Hz'; 59.94 -> 60). Web: approximate: LG getSystemInfo UHD -> 4K else 1080p, Samsung tizen.systeminfo DISPLAY; no Hz on the web (the browser can't read the panel's)",
+      "speed": "the last speed test (download only, the arrow ↓): Mbps with no decimals from 10 up, one decimal below 10 ('8,4 Mbps'), Gbps with one decimal from 1000 ('1,2 Gbps'), and how long ago ('agora', 'há 5 min', 'há 2 h', 'ontem', 'há 3 dias'). Per TV, not per profile"
+    },
+    "order_of_dropping": "when the line doesn't fit before the leftmost top item (32 px gap), drop in this order: Hz, resolution, temperature, city; the speed item always stays (it has focus)",
+    "speed_item": {
+      "rest": "type.info_line, white 0.78, no surface, inside a 56 px capsule (padding 20) so focus has room",
+      "focus": "white surface, ink #1D1D1F, scale 1.06, pill_focus shadow (as a tab)",
+      "states": {
+        "result":   "'↓ 230 Mbps · há 2 h'",
+        "never":    "'Testar velocidade' (no test yet)",
+        "testing":  "'Testando… ' + a 120x4 bar under the text (track white 0.30, fill white; on focus ink 0.25/ink) that fills over ~10 s; fill by scaleX, updated 4 times a second (not every frame)",
+        "failed":   "warning glyph + 'Teste falhou' (white 1.0), until the focus leaves the item; then back to the last result or 'Testar velocidade'. The old result is kept",
+        "offline":  "warning glyph + 'Sem internet' while the TV has no network (Android: ConnectivityManager default network; web: navigator.onLine false and the last fetch failing); the old result is hidden, not deleted"
+      },
+      "ok": "result / never / failed: starts the test. testing: nothing. offline: a toast 'Sem conexão com a internet' (no test)",
+      "test": "only when OK is pressed on this item, never by itself, never on a timer (owner). Cloudflare speed.cloudflare.com (no key; approved 2026-11-01, card 215 adds it to CLAUDE.md and README): a few tiny requests for latency, then downloads of growing size for up to 10 s or 200 MB, whichever comes first; the result is the median throughput of the larger downloads. Background thread (Android: not the UI thread; nothing escapes it, :home's watchdog counts crashes); web: XHR, no Worker needed",
+      "cancel": "leaving the home screen (an app opens, onPause / visibilitychange) cancels it and keeps the old result; Back or arrows don't cancel (the line keeps updating while the focus is elsewhere)",
+      "talkback": { "result": "Velocidade da internet: {n} megabits, testada {ago}. OK para testar de novo", "never": "Velocidade da internet: ainda não testada. OK para testar", "testing": "Testando a velocidade da internet (announced once at start); at the end: 'Velocidade da internet: {n} megabits'", "failed": "O teste de velocidade falhou. OK para tentar de novo", "offline": "Sem conexão com a internet" },
+      "fallback": { "android13": "text drawn on the bar's layer; the bar is a rect", "legacy": "same; only the item's rect is invalidated while testing", "web": "transform: scaleX on the bar", "web_lite": "same, no transition (steps every 250 ms)" }
+    },
+    "no_network_at_all": "city and resolution stay (they are local); the temperature shows the last forecast while the app keeps it, else it's dropped; the speed item says 'Sem internet'"
+  },
+
+  "drawer": {
+    "open": "Down on the row: home slides up by layout.drawer.shift, band/hero/top fade to 0, the row stays as context at y=260",
+    "keys": "glass.regular, 24 px label, symbol 36 px; focused: white surface, scale 1.07, key_focus shadow",
+    "panels": "weather only, on glass.regular, the full safe width (1728), with up to 10 hours (Snapshot cache in LEGACY, as today). The quotes leave Nova (owner, 2026-11-01); Classic keeps them when on",
+    "groups": ["Inputs (HDMI, Live TV)", "Shortcuts (All Apps, Home Settings, TV Settings, Home Assistant tiles)"]
+  },
+
+  "all_apps": {
+    "sheet": "glass.thick full screen; 5 columns of 300x169 on the same grid as the row; labels 24 px under each tile",
+    "focus": "as tile (scale 1.10, shadow, sheen); the label turns white",
+    "scroll": "the grid slides by rows to keep the focused row in rows 1-3 (spring row_scroll)"
+  },
+
+  "profile": {
+    "$note": "Meu TV OS profiles (card 214): local, one per person in the house; a name, a color and its initial. Not a Google account; no photos, emoji or third-party avatars. Each profile has its own favorites row and band preferences.",
+    "max_profiles": 6,
+    "name_max_chars": 12,
+    "initial": "first letter of the name, uppercased (locale-aware: Ui.locale()); two profiles may share it, their color and name tell them apart",
+    "palette": {
+      "$note": "White initial on each >= 4.5:1 (also the focused button: the color on white, the same pair). 'sheet' = graphic contrast on glass.thick's darkest lite tint #141418 (>= 3:1). New profiles take the first color not in use, in this order.",
+      "blue":   { "value": "#3563E0", "white": 5.23, "sheet": 3.51 },
+      "pink":   { "value": "#D0215F", "white": 5.17, "sheet": 3.56 },
+      "green":  { "value": "#2E7D32", "white": 5.13, "sheet": 3.58 },
+      "orange": { "value": "#C2410C", "white": 5.18, "sheet": 3.55 },
+      "purple": { "value": "#8550D8", "white": 5.08, "sheet": 3.62 },
+      "teal":   { "value": "#00796B", "white": 5.32, "sheet": 3.45 },
+      "gold":   { "value": "#856A00", "white": 5.17, "sheet": 3.55, "note": "replaces red #C62839 (too close to pink, owner 2026-11-01); the farthest of the candidates from the other 7 (CIELAB dE >= 46; the closest pair left is pink/blue-purple at ~21-23)" },
+      "slate":  { "value": "#5F6E88", "white": 5.16, "sheet": 3.56 }
+    },
+    "button": {
+      "place": "top bar, the last round button: right of Settings, 32 px left of the clock (button_gap 20 to the others)",
+      "size": 64, "disk": "profile color, inner rim 1 px white 0.22", "initial": { "size": 30, "weight": 600, "color": "#FFFFFF" },
+      "focus": "as every round button: white surface, scale 1.12, the name as the tip (type.button_tip), centered under it (the clock keeps it inside the safe area); the initial turns the profile color",
+      "talkback": "Profile: {name}",
+      "fallback": { "android13": "disk + text drawn on the bar's layer", "legacy": "same, no shadow", "web_lite": "same, no transition" }
+    },
+    "sheet": {
+      "title": { "text": "Who's watching?", "size": 48, "weight": 600, "y": 300, "align": "center" },
+      "glass": "glass.thick, full screen, what is under fades to 0 (as all_apps)",
+      "item": { "circle": 200, "gap": 64, "y": 440, "letter": { "size": 96, "weight": 600 }, "name": { "size": 28, "weight": 500, "dy": 236, "max_w": 300, "rest": "rgba(255,255,255,0.66)", "focus": "#FFFFFF", "active_weight": 600 } },
+      "line": "one centered line: the profiles, then Add while fewer than 6 (7 items = 1592 px, inside the 1728 safe width)",
+      "active_badge": "52 px white disk with a dark check, at the circle's lower right (not by color alone)",
+      "focus": "circle scale 1.10, shadow 0 26 44 rgba(0,0,0,0.55), white ring 6 px, 6 px off the disk (a border, so it stays in lite); the name turns white",
+      "add": "glass disk white 0.12 with a 72 px plus; focused: white surface, dark plus, scale 1.10 (no ring)",
+      "fallback": { "android13": "glass.thick AGSL; shadow from Shadows", "android8_12": "glass.thick copy + tint", "legacy": "solid sheet, Shadows bitmap for the focused circle only", "web": "as prototype", "web_flat": "shadow appears at once", "web_lite": "no shadow, no transitions; ring and badge stay; Add's disk #2A2A2D" }
+    },
+    "kids": {
+      "$note": "A profile can be marked kids (owner, 2026-11-01; card 214c). Its band's picks are filtered by age: TMDB discover with certification_country=BR and certification.lte=10 (L or 10), plus the Animation and Family genres; Continue Watching unchanged. No app blocking, no PIN. Same endpoint (no new network); its own cache, fetched in the background, so a profile switch stays <= 300 ms. Until that list arrives, the band shows Continue Watching or the app's art, never the general picks",
+      "badge": "a small white disk with a dark bear-head glyph (three filled circles, drawn here, no third-party art), at the circle's upper right (the active badge stays at the lower right): sheet 44 px (glyph 26), top bar button 22 px (glyph 14) at the disk's lower right with a 2 px ring in the bar's dark tint; never by color alone, and the TalkBack text says it",
+      "talkback": "{name}, perfil infantil (and '{name}, perfil ativo, perfil infantil' when active); the button: 'Perfil: {name}, infantil'",
+      "editor": "Home Settings > Profiles > <profile> > 'Perfil infantil' (on/off), with the line 'Sugestões só com classificação livre e até 10 anos. Não bloqueia apps.'"
+    },
+    "single_profile": "with only Principal: the button shows (Nova; Classic when on in Top Buttons) and 'Who's watching?' is not asked at a full start; it's asked from 2 profiles on (owner, 2026-11-01)",
+    "new_profile": "starts with a copy of the current profile's row (card 214 decision 3) and the first free palette color",
+    "after_full_start": "with 2 or more profiles, the sheet always shows after a full start of the TV (never on a wake from standby; Free My TV mode only; web: cold start), focus on the last profile, no timeout, Back keeps the last profile; exception: At power-on = Live TV waits 10 s and goes on with the last profile (card 214 decision 6)",
+    "classic": "Home Settings > Profiles (first row, 40 px disk + name; OK opens the same sheet) and an optional Profile button in Top Buttons, off by default, sized and focused as Classic's own top buttons (card 214 decision 5)",
+    "720p": { "button": 43, "initial": 20, "circle": 133, "gap": 43, "letter": 64, "name": 19, "title": 32, "ring": 4, "badge": 35 },
+    "motion": "sheet opens and closes as motion.sheet; focus as motion.focus; the row of the new profile appears at once under the closing sheet (no extra animation)"
+  },
+
+  "glass": {
+    "thin": {
+      "use": "round buttons at rest, Now Playing capsule, tip capsule if needed (over the band)",
+      "tint": "rgba(28,28,30,0.42)", "rim": "inner 1 px white 0.14",
+      "android13": "AGSL glass of Scene, blur 24, tint above",
+      "android8_12": "solid tint rgba(28,28,30,0.55) (too small to be worth a Backdrop copy)",
+      "legacy": "solid rgba(28,28,30,0.62)",
+      "web": "linear-gradient(rgba(40,40,44,0.62), rgba(20,20,22,0.5))",
+      "web_flat": "same, no shadow",
+      "web_lite": "solid #2A2A2D"
+    },
+    "regular": {
+      "use": "drawer keys and panels, Now Playing panel",
+      "tint_day": "rgba(255,255,255,0.78)", "tint_night": "rgba(38,38,42,0.74)", "rim": "top 1.5 px white 0.9 (day) / 0.12 (night)",
+      "android13": "AGSL glass over the sky, tint above",
+      "android8_12": "Backdrop's pre-blurred 480x270 copy stretched in the panel + tint",
+      "legacy": "solid: day #F7F7F9, night #1F1F23 (Snapshot for weather and quotes)",
+      "web": "day linear-gradient(rgba(255,255,255,0.86), rgba(255,255,255,0.66)); night linear-gradient(rgba(38,38,42,0.78), rgba(17,17,19,0.64))",
+      "web_flat": "same, no shadow",
+      "web_lite": "solid: day #FAFAFC, night #1E1E22"
+    },
+    "thick": {
+      "use": "All Apps, Home Settings sheets, the OK-held menu, toasts",
+      "tint": "rgba(22,22,26,0.88) (dark day and night, as today's sheets)",
+      "android13": "AGSL glass, blur 40, tint above",
+      "android8_12": "Backdrop 192x108 copy + tint",
+      "legacy": "solid rgba(24,24,28,0.96)",
+      "web": "full-screen sheets (All Apps): rgba(12,12,15,0.94) and what is under fades to opacity 0 (no blur, so nothing may show through); boxes (Settings): linear-gradient(rgba(34,36,44,0.96), rgba(18,20,26,0.97)) as today",
+      "web_flat": "same",
+      "web_lite": "solid #141418"
+    }
+  },
+
+  "motion": {
+    "$note": "Android: Spring(response s, damping) as Spring.java; CSS: the transition that matches it. lite = 0 ms everywhere.",
+    "focus":         { "spring": [0.30, 0.78], "css": "transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1.15)" },
+    "focus_glow":    { "spring": [0.26, 1.0], "css": "opacity 180ms ease-out", "use": "shadow, sheen" },
+    "parallax":      { "spring": [0.40, 0.70], "css": "transform 320ms cubic-bezier(0.2, 0.9, 0.3, 1.2)" },
+    "row_scroll":    { "spring": [0.32, 0.86], "css": "transform 300ms cubic-bezier(0.2, 0.9, 0.3, 1)" },
+    "band_crossfade":{ "duration_ms": 420, "css": "opacity 420ms linear" },
+    "band_text":     { "css_out": "opacity 120ms ease-in", "css_in": "opacity 200ms ease-out" },
+    "pill":          { "spring": [0.26, 0.85], "css": "transform 200ms cubic-bezier(0.2, 0.9, 0.3, 1.2), opacity 160ms" },
+    "drawer":        { "spring": [0.46, 0.92], "css": "transform 380ms cubic-bezier(0.32, 0.72, 0.2, 1), opacity 280ms" },
+    "sheet":         { "spring": [0.38, 0.90], "css": "opacity 240ms, transform 300ms cubic-bezier(0.2, 0.9, 0.3, 1) from scale(1.04)" },
+    "day_night":     { "duration_ms": 2000, "how": "sky layers crossfade by opacity; text colors switch at once (no color transitions)" },
+    "lite":          { "duration_ms": 0 }
+  },
+
+  "budget": {
+    "band_images_alive": 2,
+    "tiles_art_per_app_mb": 0.45,
+    "tiles_art_10_apps_mb": 4.5,
+    "app_art_logo_mb": 0.6,
+    "pss_target_card": "<= +8 MB per card (card 201 rule); Nova total <= 130 MB on the TCL (owner decision 9)",
+    "web_layers": "will-change only on the focused tile and on what slides (row, drawer); never on every tile"
+  },
+
+  "brand_nova": {
+    "$note": "Only what Nova adds to tokens.json brand: the word color used when there is no logo (and in design/prototype), and Spotify's gradient, which v1 lacks (it comes from web/home.js SHELF). Brand colors, logo modes and Android TILE_STYLE stay in v1.",
+    "netflix":       { "word": "#E50914" },
+    "youtube":       { "word": "#FFFFFF" },
+    "prime":         { "word": "#FFFFFF", "word_shadow": true },
+    "disney":        { "word": "#FFFFFF" },
+    "max":           { "word": "#FFFFFF" },
+    "appletv":       { "word": "#B8BCC6" },
+    "globoplay":     { "word": "#FFFFFF", "word_shadow": true },
+    "spotify":       { "word": "#FFFFFF", "word_shadow": true, "color": "#1DB954", "tile": ["#1DB954", "#0F7A36"], "source": "web/home.js SHELF and HomeApps.SHELF color 1DB954; no Android TILE_STYLE today" },
+    "clarotv":       { "word": "#E3262E" },
+    "discoveryplus": { "word": "#FFFFFF" }
+  },
+
+  "contrast_checked": {
+    "$note": "WCAG 2 ratios computed by script (sRGB relative luminance); 'worst' = a pure white photo under the scrims.",
+    "band_title_white_worst": 6.20,
+    "band_meta_086_worst": 5.10,
+    "band_dot_off_worst_graphic": 3.18,
+    "clock_white_top_scrim_y104": 6.16,
+    "tip_white_top_scrim_y165": 5.61,
+    "tab_off_078_worst": 10.68,
+    "focus_ink_on_white": 16.83,
+    "day_ink_on_sky": 14.28,
+    "day_secondary_on_sky": 5.82,
+    "day_key_off_on_glass": 5.25,
+    "night_ink_on_sky": 17.94,
+    "night_secondary_on_sky": 7.59,
+    "night_key_off_on_glass": 5.06,
+    "sheet_label_066_on_sheet": 8.39,
+    "toast_on_thick_worst": 12.48,
+    "day_chevron_graphic": 3.62,
+    "night_chevron_graphic": 4.58,
+    "round_icon_on_thin_worst": 9.29,
+    "profile_initial_white_min": 5.08,
+    "profile_initial_white_range": "5.08 (purple) - 5.32 (teal); gold 5.17",
+    "profile_disk_on_sheet_min_graphic": 3.45,
+    "kids_badge_glyph_on_white": 16.83,
+    "info_line_078_worst": 10.68,
+    "profile_name_066_on_sheet": 8.39,
+    "brand_words": "Netflix red 4.1-4.4, Claro red 3.7, Prime white 2.6 (top) - 5.3 (bottom), 3.65 mid; Globoplay 2.4-3.6, 3.07 mid; Spotify 2.6-5.4, 3.66 mid; the rest >= 6.9. Logotypes are exempt; the fallback word sits mid-tile (>= 3:1 large text) with the static shadow"
+  }
+}

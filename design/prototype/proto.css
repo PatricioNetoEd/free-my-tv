@@ -1,0 +1,411 @@
+/*
+ * Prototype of the "Nova" home screen (card 200), on a 1920 x 1080 stage scaled to the window.
+ * Same limits as web/home.css, so it also proves the look fits old TVs: no CSS variables, grid or backdrop-filter, and
+ * only transform and opacity animate (focus surfaces are separate elements whose opacity changes). Values come from
+ * design/tokens-v2.json. Classes on #stage: night, drawer-open, sheet-open, flat, lite, no-key.
+ * Font: Inter, the app's own file (app/assets/fonts/InterVariable.ttf; web/ has no copy, tools/webapp.py packs it into
+ * the LG and Samsung builds as fonts/). Nothing from the network: where the browser refuses a file:// font from a
+ * parent folder (Firefox), the fallback stack draws.
+ */
+@font-face {
+  font-family: 'Inter';
+  src: url('../../app/assets/fonts/InterVariable.ttf') format('truetype');
+  font-weight: 100 900;
+}
+
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+body { font-family: 'Inter', 'LG Smart UI', 'SamsungOne', 'Samsung Sans', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+* { -webkit-user-select: none; user-select: none; }
+
+/* MARK: - Prototype toolbar (not part of the TV screen) */
+
+#bar {
+  position: absolute; left: 0; top: 0; right: 0; height: 88px; z-index: 100;
+  background: #1A1A1D; color: #DDD; font-size: 14px; line-height: 44px; overflow: hidden;
+  padding: 0 12px; box-sizing: border-box;
+}
+#bar b { color: #FFF; margin-right: 14px; font-size: 15px; }
+#bar button {
+  font: inherit; font-size: 13px; color: #FFF; background: #34343A; border: 0; border-radius: 6px;
+  height: 32px; line-height: 32px; padding: 0 10px; margin-right: 6px; cursor: pointer; vertical-align: middle;
+}
+#bar button:hover { background: #4A4A52; }
+#bar .help { color: #9A9AA0; margin-left: 8px; }
+
+#view { position: absolute; left: 0; top: 88px; right: 0; bottom: 0; overflow: hidden; }
+
+/* MARK: - Stage */
+
+#stage {
+  position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden;
+  -webkit-transform-origin: 0 0; transform-origin: 0 0;
+  color: #1D1D1F; background: #ECECF0;
+}
+#stage.hd { outline: 2px solid #FF9F0A; }
+.layer { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+svg { display: block; }
+
+/* Sky: the screen around the band. Day and night crossfade (opacity only). */
+#sky .s { position: absolute; left: 0; top: 0; width: 100%; height: 100%; -webkit-transition: opacity 2s; transition: opacity 2s; }
+#sky .day { background: #ECECF0; }
+#sky .night { background: #0C0C0F; opacity: 0; }
+#sky .lift { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: #FFF; opacity: 0; -webkit-transition: opacity 0.45s; transition: opacity 0.45s; }
+.night #sky .night { opacity: 1; }
+.night #sky .lift { background: #000; }
+.drawer-open #sky .lift { opacity: 0.32; }
+.night.drawer-open #sky .lift { opacity: 0.42; }
+
+/* MARK: - Home: everything that slides up when the drawer opens */
+
+#home, #drawer {
+  -webkit-transition: -webkit-transform 0.38s cubic-bezier(0.32, 0.72, 0.2, 1), opacity 0.28s;
+  transition: transform 0.38s cubic-bezier(0.32, 0.72, 0.2, 1), opacity 0.28s;
+}
+#home { z-index: 1; }
+.drawer-open #home { -webkit-transform: translateY(-560px); transform: translateY(-560px); }
+#band, #hero, #topbar { -webkit-transition: opacity 0.2s; transition: opacity 0.2s; }
+.drawer-open #band, .drawer-open #hero, .drawer-open #topbar { opacity: 0; }
+
+/* MARK: - Band: the focused app's picks (or its art), full width, with scrims for the text */
+
+#band { position: absolute; left: 0; top: 0; width: 1920px; height: 820px; overflow: hidden; }
+#band .art {
+  /* ends under the opaque end of the fade, so no seam shows at the band's edge when the stage is scaled */
+  position: absolute; left: 0; top: 0; width: 1920px; height: 800px; opacity: 0;
+  -webkit-transition: opacity 0.42s linear; transition: opacity 0.42s linear;
+}
+#band .art.on { opacity: 1; }
+#band .logo { position: absolute; left: 0; top: 0; width: 1920px; height: 820px; opacity: 0; -webkit-transition: opacity 0.42s linear; transition: opacity 0.42s linear; }
+#band .logo.on { opacity: 1; }
+#band .logo .word {
+  position: absolute; left: 1020px; width: 640px; top: 250px; height: 220px; line-height: 220px;
+  text-align: center; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden;
+}
+#band .scrim, #band .fade { position: absolute; left: 0; width: 1920px; }
+#band .scrim.top {
+  top: 0; height: 340px;
+  background: -webkit-linear-gradient(top, rgba(0, 0, 0, 0.66) 0, rgba(0, 0, 0, 0.58) 200px, rgba(0, 0, 0, 0) 340px);
+  background: linear-gradient(rgba(0, 0, 0, 0.66) 0, rgba(0, 0, 0, 0.58) 200px, rgba(0, 0, 0, 0) 340px);
+}
+#band .scrim.left {
+  top: 0; height: 820px;
+  background: -webkit-linear-gradient(left, rgba(0, 0, 0, 0.75) 0, rgba(0, 0, 0, 0.62) 55%, rgba(0, 0, 0, 0) 90%);
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.75) 0, rgba(0, 0, 0, 0.62) 55%, rgba(0, 0, 0, 0) 90%);
+}
+#band .fade { top: 640px; height: 180px; -webkit-transition: opacity 2s; transition: opacity 2s; }
+#band .fade.day {
+  background: -webkit-linear-gradient(top, rgba(236, 236, 240, 0), #ECECF0 85%);
+  background: linear-gradient(rgba(236, 236, 240, 0), #ECECF0 85%);
+}
+#band .fade.night {
+  opacity: 0;
+  background: -webkit-linear-gradient(top, rgba(12, 12, 15, 0), #0C0C0F 85%);
+  background: linear-gradient(rgba(12, 12, 15, 0), #0C0C0F 85%);
+}
+.night #band .fade.night { opacity: 1; }
+.night #band .fade.day { opacity: 0; }
+
+/* MARK: - Hero text (always white: it sits on the scrimmed photo, day and night) */
+
+#hero { position: absolute; left: 0; top: 0; width: 1920px; height: 820px; color: #FFF; }
+#hero .text {
+  position: absolute; left: 96px; bottom: 260px; width: 960px;
+  -webkit-transition: opacity 0.2s ease-out; transition: opacity 0.2s ease-out;
+}
+#hero .text.swap { opacity: 0; -webkit-transition: opacity 0.12s ease-in; transition: opacity 0.12s ease-in; }
+#hero .eyebrow { font-size: 26px; font-weight: 600; line-height: 1.2; color: rgba(255, 255, 255, 0.86); margin-bottom: 10px; white-space: nowrap; }
+#hero .title {
+  font-size: 80px; font-weight: 700; line-height: 1.04; letter-spacing: -0.01em;
+  max-height: 168px; overflow: hidden;
+}
+#hero .title.long { font-size: 64px; line-height: 1.06; max-height: 136px; }
+#hero .meta { margin-top: 12px; font-size: 28px; font-weight: 500; line-height: 1.3; color: rgba(255, 255, 255, 0.86); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hero .progress { display: none; margin-top: 14px; width: 360px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.3); overflow: hidden; }
+#hero .progress i { display: block; height: 6px; background: #FFF; -webkit-transform-origin: 0 0; transform-origin: 0 0; }
+#hero .progress.on { display: block; }
+
+/* The action pill appears only while the band has focus: a white surface that grows (scale and brightness). */
+#hero .action {
+  position: absolute; left: 96px; top: 584px; height: 56px; padding: 0 30px 0 24px; border-radius: 28px;
+  background: #FFF; color: #1D1D1F; font-size: 28px; font-weight: 600; line-height: 56px; white-space: nowrap;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+  opacity: 0; -webkit-transform: scale(0.94); transform: scale(0.94);
+  -webkit-transform-origin: 0 50%; transform-origin: 0 50%;
+  -webkit-transition: -webkit-transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2), opacity 0.16s;
+  transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2), opacity 0.16s;
+}
+#hero .action svg { display: inline-block; vertical-align: -3px; margin-right: 12px; }
+.band-focus #hero .action { opacity: 1; -webkit-transform: scale(1.06); transform: scale(1.06); }
+#hero .dots {
+  position: absolute; left: 96px; top: 607px; height: 10px; white-space: nowrap;
+  -webkit-transition: -webkit-transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1); transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+#hero .dots i { display: inline-block; width: 10px; height: 10px; border-radius: 5px; margin-right: 14px; background: rgba(255, 255, 255, 0.56); vertical-align: top; }
+#hero .dots i.on { background: #FFF; -webkit-transform: scale(1.3); transform: scale(1.3); }
+
+/* MARK: - Top bar: tabs (a quiet filter of the band), the TV info line, round buttons, clock */
+
+#topbar { position: absolute; left: 0; top: 0; width: 1920px; height: 200px; color: #FFF; }
+#lefts { position: absolute; left: 96px; top: 64px; height: 56px; white-space: nowrap; }
+#tabs { display: inline-block; }
+.no-key #tabs { display: none; }
+.no-key #info { margin-left: 0; }
+.tab {
+  position: relative; display: inline-block; height: 56px; padding: 0 24px; margin-right: 8px;
+  font-size: 28px; font-weight: 500; line-height: 56px; color: rgba(255, 255, 255, 0.78);
+  -webkit-transition: -webkit-transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2); transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.tab span { position: relative; }
+.tab .cap, .tab .hl { position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: 28px; }
+.tab .cap { background: rgba(255, 255, 255, 0.16); opacity: 0; }
+.tab .hl { background: #FFF; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3); opacity: 0; -webkit-transition: opacity 0.16s; transition: opacity 0.16s; }
+.tab.on { color: #FFF; font-weight: 600; }
+.tab.on .cap { opacity: 1; }
+.tab.focus { color: #1D1D1F; -webkit-transform: scale(1.06); transform: scale(1.06); }
+.tab.focus .hl { opacity: 1; }
+
+/* The TV info line (replaces the quotes in Nova): city · temperature · resolution · refresh, then the speed item, the
+   only part that takes focus. Parts drop (Hz, resolution, temperature, city) when it would reach the buttons. */
+#info { display: inline-block; margin-left: 32px; font-size: 24px; font-weight: 500; color: rgba(255, 255, 255, 0.78); vertical-align: top; line-height: 56px; -webkit-font-feature-settings: 'tnum'; font-feature-settings: 'tnum'; }
+#info .part { display: inline-block; }
+#info .part.gone { display: none; }
+#info .sep { padding: 0 10px; }
+.speed {
+  /* its own 20 px padding keeps the focused capsule off the last dot; it grows to the right (origin on the left) */
+  position: relative; display: inline-block; height: 56px; padding: 0 20px; margin-left: -4px; vertical-align: top;
+  -webkit-transform-origin: 0 50%; transform-origin: 0 50%;
+  -webkit-transition: -webkit-transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2); transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.speed.alone { margin-left: 0; }
+.speed .hl { position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: 28px; background: #FFF; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3); opacity: 0; -webkit-transition: opacity 0.16s; transition: opacity 0.16s; }
+.speed .txt { position: relative; white-space: nowrap; }
+.speed svg { display: inline-block; vertical-align: -3px; margin-right: 8px; }
+.speed.alert { color: #FFF; }
+.speed.focus { color: #1D1D1F; -webkit-transform: scale(1.06); transform: scale(1.06); }
+.speed.focus .hl { opacity: 1; }
+/* The test's progress: 120 x 4 under the text, filled by scaleX (4 updates a second). */
+.speed .bar { position: absolute; left: 20px; bottom: 6px; width: 120px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.3); overflow: hidden; display: none; }
+.speed .bar i { display: block; width: 120px; height: 4px; background: #FFF; -webkit-transform-origin: 0 0; transform-origin: 0 0; -webkit-transition: -webkit-transform 0.25s linear; transition: transform 0.25s linear; }
+.speed.testing .bar { display: block; }
+.speed.focus .bar { background: rgba(29, 29, 31, 0.25); }
+.speed.focus .bar i { background: #1D1D1F; }
+
+#buttons { position: absolute; top: 60px; height: 64px; white-space: nowrap; }
+.round {
+  position: relative; display: inline-block; width: 64px; height: 64px; margin-left: 20px; vertical-align: top; color: #FFF;
+  -webkit-transition: -webkit-transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2); transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.round .glass, .round .hl { position: absolute; left: 0; top: 0; width: 64px; height: 64px; border-radius: 32px; }
+.round .glass {
+  background: -webkit-linear-gradient(top, rgba(40, 40, 44, 0.62), rgba(20, 20, 22, 0.5));
+  background: linear-gradient(rgba(40, 40, 44, 0.62), rgba(20, 20, 22, 0.5));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+.round .hl { background: #FFF; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3); opacity: 0; -webkit-transition: opacity 0.16s; transition: opacity 0.16s; }
+.round svg { position: absolute; left: 18px; top: 18px; }
+.round .tip {
+  position: absolute; top: 80px; left: 50%; width: 300px; margin-left: -150px; text-align: center;
+  font-size: 24px; font-weight: 600; color: #FFF; white-space: nowrap; opacity: 0;
+  -webkit-transition: opacity 0.14s; transition: opacity 0.14s;
+}
+.round.last .tip { left: auto; right: 0; margin-left: 0; text-align: right; }
+.round.focus { color: #1D1D1F; -webkit-transform: scale(1.12); transform: scale(1.12); }
+.round.focus .hl, .round.focus .tip { opacity: 1; }
+
+/* Profile button: the active profile's initial on its color (tokens-v2 profile.button). Focus as every round button:
+   white surface, scale 1.12, the name below; the initial takes the profile color there (same >= 4.5:1 pair). */
+.round .disk { position: absolute; left: 0; top: 0; width: 64px; height: 64px; border-radius: 32px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22); }
+.round .initial { position: absolute; left: 0; top: 0; width: 64px; height: 64px; line-height: 64px; text-align: center; font-size: 30px; font-weight: 600; color: #FFF; }
+/* Kids profile mark on the button: a 22 px white disk with a dark bear head at the lower right, ringed in the bar's tint. */
+.round .kid { position: absolute; left: 44px; top: 44px; width: 22px; height: 22px; border-radius: 11px; background: #FFF; color: #1D1D1F; box-shadow: 0 0 0 2px rgba(20, 20, 22, 0.8); display: none; }
+.round .kid svg { position: absolute; left: 4px; top: 4px; }
+.round.kids .kid { display: block; }
+
+#clock {
+  position: absolute; right: 96px; top: 60px; height: 64px; line-height: 64px;
+  font-size: 34px; font-weight: 600; color: #FFF; -webkit-font-feature-settings: 'tnum'; font-feature-settings: 'tnum';
+}
+
+/* MARK: - Favorites row: 300 x 169 tiles, logo (here: the name) on the brand gradient */
+
+#row { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+#tiles {
+  position: absolute; left: 0; top: 0;
+  -webkit-transition: -webkit-transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1); transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.tile {
+  position: absolute; top: 820px; width: 300px; height: 169px;
+  -webkit-transition: -webkit-transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15), opacity 0.3s;
+  transition: transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15), opacity 0.3s;
+}
+.tile .shadow {
+  position: absolute; left: 0; top: 0; width: 300px; height: 169px; border-radius: 28px;
+  box-shadow: 0 26px 44px rgba(0, 0, 0, 0.38); opacity: 0;
+  -webkit-transition: opacity 0.18s ease-out; transition: opacity 0.18s ease-out;
+}
+.night .tile .shadow { box-shadow: 0 26px 44px rgba(0, 0, 0, 0.62); }
+.tile .face {
+  position: absolute; left: 0; top: 0; width: 300px; height: 169px; border-radius: 28px; overflow: hidden;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+}
+/* At night a dark tile (Netflix, YouTube) would melt into the sky: a faint rim keeps its edge. */
+.night .tile .face { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.36), inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+.face .word {
+  position: absolute; left: 10%; right: 10%; top: 50%; height: 60px; margin-top: -30px; line-height: 60px;
+  text-align: center; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden;
+}
+.face .word.shade { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
+.face .sheen {
+  position: absolute; left: -10px; top: 0; right: -10px; bottom: 0; border-radius: 28px; opacity: 0;
+  background: -webkit-linear-gradient(top, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 55%);
+  background: linear-gradient(rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 55%);
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.22);
+  -webkit-transition: opacity 0.18s ease-out, -webkit-transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  transition: opacity 0.18s ease-out, transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.tile.focus { z-index: 2; will-change: transform; -webkit-transform: translateY(-6px) scale(1.1); transform: translateY(-6px) scale(1.1); }
+.tile.focus .shadow, .tile.focus .sheen { opacity: 1; }
+.tile.away { opacity: 0; }
+
+.chev { position: absolute; top: 758px; width: 24px; height: 24px; color: #7A7A80; opacity: 0; -webkit-transition: opacity 0.2s; transition: opacity 0.2s; }
+.chev.on { opacity: 1; }
+.chev.l { left: 96px; }
+.chev.r { left: 1800px; }
+
+/* MARK: - Drawer: inputs, shortcuts, weather (the quotes leave Nova) */
+
+#drawer { z-index: 2; opacity: 0; -webkit-transform: translateY(560px); transform: translateY(560px); }
+.drawer-open #drawer { opacity: 1; -webkit-transform: none; transform: none; }
+.group { position: absolute; top: 470px; font-size: 26px; font-weight: 600; color: #5A5A5F; white-space: nowrap; }
+.night .group { color: #A1A1A6; }
+
+.glass {
+  background: -webkit-linear-gradient(top, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.66));
+  background: linear-gradient(rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.66));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1), inset 0 1.5px 0 rgba(255, 255, 255, 0.95);
+}
+.night .glass {
+  background: -webkit-linear-gradient(top, rgba(38, 38, 42, 0.78), rgba(17, 17, 19, 0.64));
+  background: linear-gradient(rgba(38, 38, 42, 0.78), rgba(17, 17, 19, 0.64));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), inset 0 1.5px 0 rgba(255, 255, 255, 0.12);
+}
+.key {
+  position: absolute; top: 520px; height: 140px; border-radius: 24px; color: #1D1D1F; text-align: center;
+  -webkit-transition: -webkit-transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2); transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.night .key { color: #F5F5F7; }
+.key .hl { position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: 24px; background: #FFF; box-shadow: 0 16px 34px rgba(0, 0, 0, 0.3); opacity: 0; -webkit-transition: opacity 0.16s; transition: opacity 0.16s; }
+.night .key .hl { box-shadow: 0 16px 34px rgba(0, 0, 0, 0.5); }
+.key svg { position: absolute; left: 50%; top: 30px; margin-left: -18px; }
+.key .label { position: absolute; left: 10px; right: 10px; top: 86px; font-size: 24px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.key.off { color: #6A6A70; }
+.night .key.off { color: rgba(255, 255, 255, 0.5); }
+.key.focus, .night .key.focus { color: #1D1D1F; -webkit-transform: scale(1.07); transform: scale(1.07); z-index: 2; }
+.key.focus .hl { opacity: 1; }
+
+.panel { position: absolute; top: 704px; height: 300px; border-radius: 32px; overflow: hidden; color: #1D1D1F; }
+.night .panel { color: #F5F5F7; }
+.panel .head { position: absolute; left: 36px; top: 30px; font-size: 26px; font-weight: 600; color: #5A5A5F; white-space: nowrap; }
+.panel .side { position: absolute; right: 36px; top: 32px; font-size: 24px; font-weight: 500; color: #5A5A5F; white-space: nowrap; }
+.night .panel .head, .night .panel .side { color: #A1A1A6; }
+.panel .temp { position: absolute; left: 36px; top: 80px; font-size: 96px; font-weight: 300; line-height: 100px; -webkit-font-feature-settings: 'tnum'; font-feature-settings: 'tnum'; }
+.panel .cond { position: absolute; left: 36px; top: 192px; font-size: 28px; font-weight: 500; white-space: nowrap; }
+.panel .range { position: absolute; left: 36px; top: 236px; font-size: 24px; font-weight: 500; color: #5A5A5F; white-space: nowrap; }
+.night .panel .range, .night .panel .hour .t { color: #A1A1A6; }
+.panel .hour { position: absolute; top: 84px; width: 110px; text-align: center; -webkit-font-feature-settings: 'tnum'; font-feature-settings: 'tnum'; }
+.panel .hour .t { font-size: 24px; font-weight: 500; color: #5A5A5F; }
+.panel .hour svg { margin: 18px auto 14px; }
+.panel .hour .d { font-size: 28px; font-weight: 500; }
+.panel .split { position: absolute; left: 400px; top: 34px; bottom: 34px; width: 2px; background: rgba(0, 0, 0, 0.1); }
+.night .panel .split { background: rgba(255, 255, 255, 0.14); }
+
+/* MARK: - All Apps sheet (thick glass, dark day and night) */
+
+.sheet {
+  z-index: 3; color: #FFF; background: rgba(12, 12, 15, 0.94); opacity: 0; visibility: hidden;
+  -webkit-transform: scale(1.04); transform: scale(1.04);
+  -webkit-transition: opacity 0.24s, -webkit-transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), visibility 0s 0.3s;
+  transition: opacity 0.24s, transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), visibility 0s 0.3s;
+}
+/* Without a real blur the sheet is nearly opaque, and what's under it fades out: no tiles show through. */
+.sheet-open #home, .sheet-open #drawer { opacity: 0; }
+.sheet.open { opacity: 1; visibility: visible; -webkit-transform: none; transform: none; -webkit-transition-delay: 0s; transition-delay: 0s; }
+.sheet h2 { position: absolute; left: 96px; top: 70px; margin: 0; font-size: 40px; font-weight: 600; }
+#apps .grid { position: absolute; left: 0; top: 0; width: 1920px; -webkit-transition: -webkit-transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1); transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1); }
+.cell { position: absolute; width: 300px; height: 230px; }
+.cell .tile { top: 0; }
+.cell .label { position: absolute; left: 0; right: 0; top: 186px; text-align: center; font-size: 24px; font-weight: 500; color: rgba(255, 255, 255, 0.66); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell.focus .label { color: #FFF; }
+
+/* MARK: - Profiles sheet ("Who's watching?"): one centered line of up to 6 profiles and Add, on thick glass */
+
+#profiles h2 { left: 0; right: 0; top: 300px; text-align: center; font-size: 48px; }
+.who { position: absolute; top: 440px; width: 200px; height: 290px; }
+.who .orb {
+  position: absolute; left: 0; top: 0; width: 200px; height: 200px;
+  -webkit-transition: -webkit-transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15); transition: transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.15);
+}
+.who .shadow, .who .disk, .who .hl { position: absolute; left: 0; top: 0; width: 200px; height: 200px; border-radius: 100px; }
+.who .shadow { box-shadow: 0 26px 44px rgba(0, 0, 0, 0.55); opacity: 0; -webkit-transition: opacity 0.18s ease-out; transition: opacity 0.18s ease-out; }
+.who .disk { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.18); }
+.who.add .disk { background: rgba(255, 255, 255, 0.12); }
+.who .hl { background: #FFF; opacity: 0; -webkit-transition: opacity 0.16s; transition: opacity 0.16s; }
+/* The ring is a border (not a box-shadow), so it stays in lite; 6 px white, 6 px off the disk. */
+.who .ring {
+  position: absolute; left: -12px; top: -12px; width: 224px; height: 224px; border-radius: 112px;
+  border: 6px solid #FFF; box-sizing: border-box; opacity: 0; -webkit-transition: opacity 0.16s; transition: opacity 0.16s;
+}
+.who .letter { position: absolute; left: 0; top: 0; width: 200px; height: 200px; line-height: 200px; text-align: center; font-size: 96px; font-weight: 600; color: #FFF; }
+.who svg { position: absolute; left: 64px; top: 64px; color: #FFF; }
+.who .badge { position: absolute; left: 148px; top: 148px; width: 52px; height: 52px; border-radius: 26px; background: #FFF; color: #1D1D1F; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35); }
+.who .badge svg { left: 12px; top: 12px; color: #1D1D1F; }
+/* Kids profile mark: 44 px white disk with a dark bear head, upper right (the active check stays lower right). */
+.who .kid { position: absolute; left: 156px; top: 0; width: 44px; height: 44px; border-radius: 22px; background: #FFF; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35); }
+.who .kid svg { left: 9px; top: 9px; color: #1D1D1F; }
+.who .name {
+  position: absolute; left: -50px; width: 300px; top: 236px; text-align: center; font-size: 28px; font-weight: 500;
+  color: rgba(255, 255, 255, 0.66); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.who.on .name { font-weight: 600; }
+.who.focus .orb { -webkit-transform: scale(1.1); transform: scale(1.1); }
+.who.focus .shadow, .who.focus .ring { opacity: 1; }
+.who.focus .name { color: #FFF; }
+.who.add.focus .ring { opacity: 0; }
+.who.add.focus .hl { opacity: 1; }
+.who.add.focus svg { color: #1D1D1F; }
+
+/* MARK: - Toast */
+
+#toast {
+  position: absolute; left: 50%; top: 60px; z-index: 50; max-width: 900px; padding: 18px 30px; border-radius: 32px;
+  font-size: 26px; font-weight: 500; line-height: 1.3; color: rgba(255, 255, 255, 0.95); white-space: nowrap;
+  background: rgba(22, 22, 26, 0.9); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  opacity: 0; -webkit-transform: translate(-50%, -16px); transform: translate(-50%, -16px);
+  -webkit-transition: opacity 0.2s, -webkit-transform 0.2s; transition: opacity 0.2s, transform 0.2s;
+}
+#toast.on { opacity: 1; -webkit-transform: translate(-50%, 0); transform: translate(-50%, 0); }
+
+/* MARK: - Light paths */
+
+/* flat (Samsung up to 2 GB): shadows stay static, nothing animates a shadow, no parallax. */
+.flat .tile .shadow, .flat .face .sheen { -webkit-transition: none; transition: none; }
+.flat .face .sheen { -webkit-transform: none !important; transform: none !important; }
+.flat #tiles, .flat #home, .flat #drawer { will-change: transform; }
+
+/* lite (Tizen 2.x, 1 GB LGs; Android LEGACY looks like this, plus the cached shadows): no shadows, no transitions,
+   no sheen, solid glass; focus = scale + a white ring. */
+.lite * { box-shadow: none !important; text-shadow: none !important; -webkit-transition: none !important; transition: none !important; }
+.lite .tile .shadow, .lite .face .sheen { display: none; }
+.lite.night .tile .face { border: 1px solid rgba(255, 255, 255, 0.14); box-sizing: border-box; }
+.lite .tile.focus .face, .lite.night .tile.focus .face { border: 3px solid #FFF; box-sizing: border-box; }
+.lite .tile.focus .face .word { margin-top: -33px; }
+.lite .round .glass { background: #2A2A2D; }
+.lite .glass { background: #FAFAFC; }
+.lite.night .glass { background: #1E1E22; }
+.lite .sheet { background: #141418; }
+.lite .who.add .disk { background: #2A2A2D; }
+.lite #toast { background: #16161A; }
+.lite .round .kid { box-shadow: 0 0 0 2px #2A2A2D !important; }
+
+/* Read aloud only (the prototype's stand-in for TalkBack announcements). */
+.sr { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
