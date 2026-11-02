@@ -121,6 +121,7 @@ public class SettingsActivity extends Activity {
 
     @Override protected void onDestroy() {
         if (view != null) view.stopKeyPage();
+        if (view != null) view.dismissProfileDialog();   // before the window goes: no "leaked window"
         if (alive != null && alive.get() == this) alive = null;
         super.onDestroy();
     }
@@ -159,6 +160,7 @@ public class SettingsActivity extends Activity {
             return;
         }
         AppLog.w("settings: closed behind the home screen");
+        if (view != null) view.dismissProfileDialog();   // as Cancel: nothing typed is saved
         finish();
     }
 
@@ -204,7 +206,7 @@ public class SettingsActivity extends Activity {
 
     static final class SettingsView extends View implements Choreographer.FrameCallback {
         private static final int MAIN = 0, HOME_CHOICE = 1, HOME_SETTINGS = 2, REMOTE_KEYS = 3, PICKER = 4, SHELF_EDIT = 5,
-                POWER = 6, TMDB_KEY = 7, PICKS = 8, PICK_FROM = 9, WATCH_APPS = 10;
+                POWER = 6, TMDB_KEY = 7, PICKS = 8, PICK_FROM = 9, WATCH_APPS = 10, PROFILES = 11, PROFILE = 12;
         private static final float LIST_ROW_H = 68, LIST_ROW_GAP = 6;
         private static final int PICK_VISIBLE = 9;
         private static final float LIST_X = 1000, LIST_R = 1824, LIST_TOP = 186, ROW_GAP = 8, CHOICE_H = 104;
@@ -279,6 +281,14 @@ public class SettingsActivity extends Activity {
         private int w, h;
         private float k = 1;
         private Paint title, subtitle, version, rowLabel, rowValue, rowSub, header, cellLabel, cellValue, warn, spinner, white, shadow;
+        // A profile's disk (design 200 §15: 40 px in its color, the white initial, a 1 px rim at 22%).
+        private Paint diskFill, diskRim, diskInitial;
+        /** The profile the Profile screen edits (Home Settings → Profiles → one of them). */
+        private int profileEdit;
+        /** The name or delete dialog that's up, if any: dismissed when this screen closes (SettingsActivity.onDestroy). */
+        private AlertDialog profileDialog;
+        /** A new profile's shelf is being read (off the UI thread): a second OK waits for it. */
+        private boolean creating;
         private TextPaint notice, rowValueFit;
 
         private final Runnable poll = new Runnable() {
@@ -432,6 +442,20 @@ public class SettingsActivity extends Activity {
                     return app[1] + ", " + (place >= 0 ? Ui.trf("on the shelf, place {n}", "n", place + 1)
                             : Ui.tr("not on the shelf"));
                 }
+                case PROFILES: {
+                    List<Integer> ids = Profiles.list();
+                    if (row == ids.size()) return Ui.tr("Add profile");
+                    if (row > ids.size()) return "";
+                    int id = ids.get(row);
+                    String name = Profiles.name(id);
+                    return id == Profiles.active() ? Ui.trf("{name}, active profile", "name", name) : name;
+                }
+                case PROFILE: {
+                    int[] rows = profileRows();
+                    if (row >= rows.length) return "";
+                    String value = profileValue(rows[row]);
+                    return value.isEmpty() ? profileLabel(rows[row]) : profileLabel(rows[row]) + ", " + value;
+                }
                 case TMDB_KEY:
                     if (row >= keyRowIds.length) return "";
                     // TalkBack can't see the drawn text: the first row also says what the key is for and how to get one.
@@ -534,6 +558,13 @@ public class SettingsActivity extends Activity {
             qrPaint.setFilterBitmap(false);
             qrSlot = new Paint(Paint.ANTI_ALIAS_FLAG);
             qrSlot.setColor(0x14FFFFFF);
+            diskFill = new Paint(Paint.ANTI_ALIAS_FLAG);
+            diskRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+            diskRim.setStyle(Paint.Style.STROKE);
+            diskRim.setStrokeWidth(Math.max(1, k));
+            diskRim.setColor(0x38FFFFFF);
+            diskInitial = Ui.text(Ui.semibold, 19 * k, 0xFFFFFFFF);
+            diskInitial.setTextAlign(Paint.Align.CENTER);
         }
 
         /**
@@ -602,6 +633,8 @@ public class SettingsActivity extends Activity {
                 case PICKS: return picksLabels().length;
                 case PICK_FROM: return Math.min(PICK_VISIBLE, services.size());
                 case WATCH_APPS: return Math.min(PICK_VISIBLE, listSize());
+                case PROFILES: return Profiles.list().size() + 1;   // and Add profile (Unavailable at 6)
+                case PROFILE: return profileRows().length;
                 default: return Prefs.KEYS.length;
             }
         }
@@ -641,6 +674,8 @@ public class SettingsActivity extends Activity {
             else if (screen == TMDB_KEY) drawKey(c);
             else if (screen == PICK_FROM) drawServices(c);
             else if (screen == WATCH_APPS) drawWatchApps(c);
+            else if (screen == PROFILES) drawProfiles(c);
+            else if (screen == PROFILE) drawProfile(c);
             else drawList(c);
         }
 
@@ -960,6 +995,8 @@ public class SettingsActivity extends Activity {
                         moveShelfApp(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
                     } else if (down && (screen == HOME_SETTINGS || screen == REMOTE_KEYS || screen == POWER || screen == PICKS || screen == PICK_FROM)) {
                         adjust(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
+                    } else if (down && screen == PROFILE) {
+                        stepProfile(e.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
                     }
                     whyRows = null;   // a value or the rows' order changed: what each row needs may have too
                     invalidate();
@@ -993,25 +1030,25 @@ public class SettingsActivity extends Activity {
                                 pickScroll = 0;   // the picker's scroll isn't this short list's
                                 screen = POWER;
                             } else if (screen == PICKER && (pickFor == PICK_CITY || pickFor == PICK_LANGUAGE)) {
-                                showSettingsRow(pickFor == PICK_CITY ? CITY_ROW : 0);
+                                showSettingsRow(pickFor == PICK_CITY ? CITY_ROW : LANGUAGE_ROW);
                             } else if (screen == PICKER) {
                                 focus = pickFor - 1;
                                 screen = REMOTE_KEYS;
                             } else if (screen == TMDB_KEY) {
                                 closeKeyScreen();
                             } else if (screen == PICKS) {
-                                focus = PICKS_ROW;
-                                pickScroll = 0;
-                                screen = HOME_SETTINGS;
+                                showSettingsRow(PICKS_ROW);
+                            } else if (screen == PROFILE) {
+                                openProfiles(profileEdit);
+                            } else if (screen == PROFILES) {
+                                showSettingsRow(PROFILES_ROW);
                             } else if (screen == PICK_FROM) {
                                 countServicesOff();
                                 pickScroll = 0;   // the Picks screen has a few rows
                                 focus = 1;
                                 screen = PICKS;
                             } else if (screen == WATCH_APPS) {
-                                focus = WATCH_ROW;   // on the list's first screen
-                                pickScroll = 0;
-                                screen = HOME_SETTINGS;
+                                showSettingsRow(WATCH_ROW);   // past the first screen since Profiles came first
                             } else {
                                 focus = screen == HOME_SETTINGS ? 2 : screen == SHELF_EDIT ? (editingTop ? 4 : 3)
                                         : screen == REMOTE_KEYS ? 5 : screen == POWER ? 6 : 0;
@@ -1032,14 +1069,15 @@ public class SettingsActivity extends Activity {
 
         private static final String[] UNITS = {"auto", "C", "F"}, THEMES = {"auto", "light", "dark"},
                 CLOCKS = {"auto", "24", "12"};
-        /** Home Settings: language, temperature, theme, appearance, clock, my photos, sounds, top of the screen, picks, Continue
-         *  Watching's apps, watch from the screensaver, Android apps, status icons, Recent Apps, weather, city, forecast,
-         *  now playing, Home Assistant (only on builds with its address), quotes, one row per coin, then the TMDB and Watchmode keys and
-         *  updates (the last row). */
-        private static final int APPEARANCE_ROW = 3, CLOCK_ROW = 4, PHOTOS_ROW = 5, SOUNDS_ROW = 6, TOP_ROW = 7,
-                PICKS_ROW = 8, WATCH_ROW = 9, SAVER_ROW = 10, ANDROID_APPS_ROW = 11, STATUS_ICONS_ROW = 12, RECENTS_ROW = 13,
-                POWER_ON_ROW = 14, WEATHER_ROW = 15, CITY_ROW = 16, FORECAST_ROW = 17, PLAYING_ROW = 18,
-                HOME_ROW = Config.HOME_ASSISTANT ? 19 : -1, QUOTES_ROW = Config.HOME_ASSISTANT ? 20 : 19, COIN_ROWS = QUOTES_ROW + 1;
+        /** Home Settings: profiles, language, temperature, theme, appearance, clock, my photos, sounds, top of the screen,
+         *  picks, Continue Watching's apps, watch from the screensaver, Android apps, status icons, Recent Apps, weather,
+         *  city, forecast, now playing, Home Assistant (only on builds with its address), quotes, one row per coin, then
+         *  the TMDB and Watchmode keys and updates (the last row). */
+        private static final int PROFILES_ROW = 0, LANGUAGE_ROW = 1, TEMPERATURE_ROW = 2, THEME_ROW = 3, APPEARANCE_ROW = 4,
+                CLOCK_ROW = 5, PHOTOS_ROW = 6, SOUNDS_ROW = 7, TOP_ROW = 8, PICKS_ROW = 9, WATCH_ROW = 10, SAVER_ROW = 11,
+                ANDROID_APPS_ROW = 12, STATUS_ICONS_ROW = 13, RECENTS_ROW = 14, POWER_ON_ROW = 15, WEATHER_ROW = 16,
+                CITY_ROW = 17, FORECAST_ROW = 18, PLAYING_ROW = 19,
+                HOME_ROW = Config.HOME_ASSISTANT ? 20 : -1, QUOTES_ROW = Config.HOME_ASSISTANT ? 21 : 20, COIN_ROWS = QUOTES_ROW + 1;
         /** No "home" on Xiaomi TVs: their remote sends one Home press as a burst of presses (HomeView.BURST_MS). */
         private static final String[] RECENTS = RemoteKeys.XIAOMI ? new String[] {"off", "drawer"}
                 : new String[] {"off", "drawer", "home"};
@@ -1052,6 +1090,7 @@ public class SettingsActivity extends Activity {
 
         private String[] settingLabels() {
             List<String> l = new ArrayList<>();
+            l.add(Ui.tr("Profiles"));
             l.add(Ui.tr("Language"));
             l.add(Ui.tr("Temperature"));
             l.add(Ui.tr("Theme"));
@@ -1150,12 +1189,13 @@ public class SettingsActivity extends Activity {
         private String[] settingValues() {
             String[] labels = settingLabels();
             String[] v = new String[labels.length];
+            v[PROFILES_ROW] = Profiles.name(Profiles.active());   // drawn after its disk
             String lang = Prefs.language();
-            v[0] = lang.equals("auto") ? Ui.tr("Automatic") : Ui.languageName(lang);
+            v[LANGUAGE_ROW] = lang.equals("auto") ? Ui.tr("Automatic") : Ui.languageName(lang);
             String unit = Prefs.temperature();
-            v[1] = unit.equals("C") ? "°C" : unit.equals("F") ? "°F" : Ui.tr("unit|Automatic");
+            v[TEMPERATURE_ROW] = unit.equals("C") ? "°C" : unit.equals("F") ? "°F" : Ui.tr("unit|Automatic");
             String theme = Prefs.theme();
-            v[2] = theme.equals("light") ? Ui.tr("Light") : theme.equals("dark") ? Ui.tr("Dark") : Ui.tr("Automatic");
+            v[THEME_ROW] = theme.equals("light") ? Ui.tr("Light") : theme.equals("dark") ? Ui.tr("Dark") : Ui.tr("Automatic");
             int photos = Photos.files(getContext()).size();
             v[PHOTOS_ROW] = photos == 0 ? Ui.tr("photos|None")
                     : Prefs.photos() ? Ui.plural("plural|one:{n} photo|other:{n} photos", photos) : Ui.tr("Off");
@@ -1240,6 +1280,7 @@ public class SettingsActivity extends Activity {
                     String need = need(r);
                     whyRows[r] = screen == HOME_SETTINGS && pickScroll + r >= COIN_ROWS && pickScroll + r < keyRow() && !Prefs.quotes()
                             ? Ui.tr("Turn on the Quotes widget to pick its coins.")
+                            : screen == PROFILES && r == n - 1 && Profiles.full() ? Ui.tr("Up to 6 profiles")
                             : need == null ? null : Capabilities.missing(getContext(), need);
                 }
             }
@@ -1485,13 +1526,14 @@ public class SettingsActivity extends Activity {
             }
             int row = pickScroll + focus;
             switch (row) {
-                case 0: break;   // OK opens the language picker.
-                case 1: {
+                case PROFILES_ROW: return;   // OK opens the list
+                case LANGUAGE_ROW: break;   // OK opens the language picker.
+                case TEMPERATURE_ROW: {
                     int at = java.util.Arrays.asList(UNITS).indexOf(Prefs.temperature());
                     Prefs.setTemperature(UNITS[(at + dir + UNITS.length) % UNITS.length]);
                     break;
                 }
-                case 2: {
+                case THEME_ROW: {
                     int at = java.util.Arrays.asList(THEMES).indexOf(Prefs.theme());
                     Prefs.setTheme(THEMES[(at + dir + THEMES.length) % THEMES.length]);
                     SleepOverlay.update(getContext());   // the pill's glass follows
@@ -2149,6 +2191,246 @@ public class SettingsActivity extends Activity {
             c.drawText(Ui.tr("OK turns an app on or off in Continue Watching."), LIST_X * k + 30 * k, hy, hint);
         }
 
+        // MARK: - Profiles (card 214a): the list, one profile's rows, and the name dialog (Profiles.askName)
+
+        /** A profile's rows: Use (not the active one), Name, Color, Starting tab, Delete (not the Main one). */
+        private static final int PR_USE = 0, PR_NAME = 1, PR_COLOR = 2, PR_TAB = 3, PR_DELETE = 4;
+        // The kids row (Profiles.setKids) stays hidden until card 214c gives it its filter (owner, 2026-11-02).
+
+        private int[] profileRows() {
+            boolean active = profileEdit == Profiles.active(), main = profileEdit == Profiles.MAIN;
+            int[] rows = new int[5];
+            int n = 0;
+            if (!active) rows[n++] = PR_USE;
+            rows[n++] = PR_NAME;
+            rows[n++] = PR_COLOR;
+            rows[n++] = PR_TAB;
+            if (!main) rows[n++] = PR_DELETE;
+            return java.util.Arrays.copyOf(rows, n);
+        }
+
+        private static String profileLabel(int row) {
+            switch (row) {
+                case PR_USE: return Ui.tr("Use this profile");
+                case PR_NAME: return Ui.tr("profile|Name");
+                case PR_COLOR: return Ui.tr("Color");
+                case PR_TAB: return Ui.tr("Starting tab");
+                default: return Ui.tr("Delete profile");
+            }
+        }
+
+        private static String tabName(int tab) {
+            return tab == 1 ? Ui.tr("Movies") : tab == 2 ? Ui.tr("Shows") : Ui.tr("Explore");
+        }
+
+        private String profileValue(int row) {
+            switch (row) {
+                case PR_NAME: return Profiles.name(profileEdit);
+                case PR_COLOR: return Profiles.colorName(Profiles.color(profileEdit));
+                case PR_TAB: return tabName(Profiles.tab(profileEdit));
+                default: return "";
+            }
+        }
+
+        /** The list, with the focus on profile `id` (or on Add profile when it's gone). */
+        private void openProfiles(int id) {
+            screen = PROFILES;
+            pickScroll = 0;
+            int at = Profiles.list().indexOf(id);
+            focus = at >= 0 ? at : Profiles.list().size();
+        }
+
+        private void openProfile(int id) {
+            profileEdit = id;
+            screen = PROFILE;
+            pickScroll = 0;
+            focus = 0;
+        }
+
+        /** OK in the list: a profile's rows, or Add profile (a name, then it's the active one: owner, 2026-11-02). */
+        private void activateProfiles() {
+            List<Integer> ids = Profiles.list();
+            if (focus < ids.size()) {
+                openProfile(ids.get(focus));
+            } else {
+                profileDialog = Profiles.askName(activity, Ui.tr("Add profile"), null, name -> {
+                    if (creating) return;
+                    creating = true;
+                    final Context c = getContext().getApplicationContext();
+                    final int from = Profiles.active();
+                    // The shelf to copy, resolved off the UI thread (the built-in list asks the PackageManager ~30 times).
+                    new Thread(() -> {
+                        List<String> read;
+                        try {
+                            read = HomeApps.shelfPackages(c, from);
+                        } catch (RuntimeException e) {   // nothing may escape: :home's watchdog counts it as a crash
+                            AppLog.w("profiles: shelf not read: " + e);
+                            read = null;
+                        }
+                        final List<String> shelf = read;
+                        handler.post(() -> {
+                            creating = false;
+                            if (shelf == null || activity.isFinishing() || activity.isDestroyed()) return;
+                            if (Profiles.active() != from) return;   // can't happen from here; never copy another's
+                            int id = Profiles.create(name, shelf);
+                            if (id < 0) return;
+                            Profiles.setActive(id);   // the home screen shows its shelf when it's back in front
+                            openProfile(id);
+                            whyRows = null;
+                            invalidate();
+                            spoken.focusMoved();
+                        });
+                    }, "profile-shelf").start();
+                });
+            }
+            for (Spring sp : pop) sp.snap(0);
+            invalidate();
+            spoken.focusMoved();
+        }
+
+        /** OK on a profile's row. */
+        private void activateProfile() {
+            int[] rows = profileRows();
+            if (focus >= rows.length) return;
+            switch (rows[focus]) {
+                case PR_USE:
+                    Profiles.setActive(profileEdit);   // applied in place when the home screen shows again
+                    announceForAccessibility(Ui.trf("Profile: {name}", "name", Profiles.name(profileEdit)));
+                    openProfiles(profileEdit);
+                    for (Spring sp : pop) sp.snap(0);
+                    break;
+                case PR_NAME:
+                    final int id = profileEdit;
+                    profileDialog = Profiles.askName(activity, Ui.tr("profile|Name"), Profiles.name(id), name -> {
+                        Profiles.rename(id, name);
+                        invalidate();
+                        spoken.focusMoved();
+                    });
+                    return;
+                case PR_COLOR:
+                case PR_TAB:
+                    stepProfile(1);
+                    break;
+                default:
+                    askDeleteProfile();
+                    return;
+            }
+            invalidate();
+            spoken.focusMoved();
+        }
+
+        /** ← → on Color (all eight, even one another profile has) and Starting tab. */
+        private void stepProfile(int dir) {
+            int[] rows = profileRows();
+            if (focus >= rows.length) return;
+            int n = Profiles.COLORS.length;
+            if (rows[focus] == PR_COLOR) Profiles.setColor(profileEdit, (Profiles.color(profileEdit) + dir + n) % n);
+            else if (rows[focus] == PR_TAB) Profiles.setTab(profileEdit, (Profiles.tab(profileEdit) + dir + Profiles.TABS) % Profiles.TABS);
+            else return;
+            spoken.focusMoved();   // TalkBack reads the new color's or tab's name
+        }
+
+        /** Asks, then deletes it (the active one goes back to the Main profile first). Apps aren't touched. */
+        private void askDeleteProfile() {
+            final int id = profileEdit;
+            AlertDialog dialog = new AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    // The question as the message: a title is cut at two lines, and in ru, de or el it's longer.
+                    .setTitle(Ui.tr("Delete profile"))
+                    .setMessage(Ui.trf("Delete the profile {name}? Its row goes away; the apps stay installed.", "name", Profiles.name(id)))
+                    .setPositiveButton(Ui.tr("Delete"), (d, which) -> {
+                        Profiles.delete(id);
+                        openProfiles(Profiles.active());
+                        whyRows = null;
+                        invalidate();
+                        spoken.focusMoved();
+                    })
+                    .setNegativeButton(Ui.tr("Cancel"), null)
+                    .show();
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).requestFocus();   // one stray OK keeps it
+            profileDialog = dialog;
+        }
+
+        /** Closes the profile dialog that's up (as Cancel: nothing is saved). */
+        void dismissProfileDialog() {
+            if (profileDialog != null && profileDialog.isShowing()) profileDialog.dismiss();
+            profileDialog = null;
+        }
+
+        /** A profile's disk: its color, a faint rim and the white initial in the middle. */
+        private void drawDisk(Canvas c, float cx, float cy, float r, int color, String initial) {
+            diskFill.setColor(color);
+            c.drawCircle(cx, cy, r, diskFill);
+            c.drawCircle(cx, cy, r - diskRim.getStrokeWidth() / 2, diskRim);
+            c.drawText(initial, cx, cy + Ui.halfCap(diskInitial), diskInitial);
+        }
+
+        /** One row per profile (its disk, its name, a check on the active one), then Add profile. */
+        private void drawProfiles(Canvas c) {
+            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
+            c.drawText(Ui.tr("Profiles"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
+            List<Integer> ids = Profiles.list();
+            int active = Profiles.active(), rows = rowCount();
+            float cw = Symbols.width(getContext(), "chevron_right", 22 * k), ck = Symbols.width(getContext(), "check", 26 * k);
+            for (int i = 0; i < rows; i++) {
+                float y = (LIST_TOP + 20 + i * (LIST_ROW_H + LIST_ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
+                float f = drawRowBackground(c, i);
+                boolean add = i == ids.size(), off = unavailable(i) != null;
+                rowLabel.setColor(off ? blend(0x73FFFFFF, 0x731C1C1E, f) : blend(0xF2FFFFFF, INK, f));
+                float base = rowRect.centerY() + Ui.halfCap(rowLabel), x = rowRect.left + 30 * k, right = rowRect.right - 30 * k;
+                if (add) {
+                    // A plain disk with a plus, as the sheet's Add (design 200 §15).
+                    diskFill.setColor(blend(0x1FFFFFFF, 0x1F1C1C1E, f));
+                    c.drawCircle(x + 20 * k, rowRect.centerY(), 20 * k, diskFill);
+                    diskInitial.setColor(off ? blend(0x73FFFFFF, 0x731C1C1E, f) : blend(0xFFFFFFFF, INK, f));
+                    c.drawText("+", x + 20 * k, rowRect.centerY() + Ui.halfCap(diskInitial), diskInitial);
+                    diskInitial.setColor(0xFFFFFFFF);
+                    c.drawText(Ui.tr("Add profile"), x + 60 * k, base, rowLabel);
+                    if (off) {
+                        rowValue.setColor(blend(0x59FFFFFF, 0x591C1C1E, f));
+                        c.drawText(Ui.tr("Unavailable"), right, base, rowValue);
+                    }
+                    continue;
+                }
+                int id = ids.get(i);
+                drawDisk(c, x + 20 * k, rowRect.centerY(), 20 * k, Profiles.colorValue(id), Profiles.initial(id));
+                c.drawText(Profiles.name(id), x + 60 * k, base, rowLabel);
+                Symbols.draw(getContext(), c, "chevron_right", right - cw / 2, rowRect.centerY(), 22 * k, blend(0x66FFFFFF, 0x991C1C1E, f));
+                if (id == active) {   // not by color alone: a check, as on the choices in use
+                    Symbols.draw(getContext(), c, "check", right - cw - 16 * k - ck / 2, rowRect.centerY(), 26 * k, blend(0xFFFFFFFF, INK, f));
+                }
+            }
+        }
+
+        /** One profile: Use, Name, Color (its disk and name), Starting tab, Delete. */
+        private void drawProfile(Canvas c) {
+            Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
+            float hx = LIST_X * k + 30 * k, hy = (LIST_TOP - 24) * k;
+            drawDisk(c, hx + 20 * k, hy - 12 * k, 20 * k, Profiles.colorValue(profileEdit), Profiles.initial(profileEdit));
+            c.drawText(Profiles.name(profileEdit), hx + 60 * k, hy, heading);
+            int[] rows = profileRows();
+            for (int i = 0; i < rows.length; i++) {
+                float y = (LIST_TOP + 20 + i * (LIST_ROW_H + LIST_ROW_GAP)) * k;
+                rowRect.set(LIST_X * k, y, LIST_R * k, y + LIST_ROW_H * k);
+                float f = drawRowBackground(c, i);
+                rowLabel.setColor(blend(0xF2FFFFFF, INK, f));
+                rowValue.setColor(blend(0xB3FFFFFF, 0xB31C1C1E, f));
+                float base = rowRect.centerY() + Ui.halfCap(rowLabel), right = rowRect.right - 30 * k;
+                c.drawText(profileLabel(rows[i]), rowRect.left + 30 * k, base, rowLabel);
+                String value = profileValue(rows[i]);
+                boolean steps = rows[i] == PR_COLOR || rows[i] == PR_TAB;
+                if (steps) value = "‹  " + value + "  ›";   // ← → change it
+                c.drawText(value, right, base, rowValue);
+                if (rows[i] == PR_COLOR) {
+                    drawDisk(c, right - rowValue.measureText(value) - 34 * k, rowRect.centerY(), 20 * k,
+                            Profiles.colorValue(profileEdit), Profiles.initial(profileEdit));
+                }
+            }
+            Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
+            float y = (LIST_TOP + 20 + rows.length * (LIST_ROW_H + LIST_ROW_GAP) + 36) * k;
+            c.drawText(Ui.tr("OK or the arrows change the value."), LIST_X * k + 30 * k, y, hint);
+        }
+
         // MARK: - Shelf editor
 
         private void openShelfEditor(boolean top) {
@@ -2214,7 +2496,9 @@ public class SettingsActivity extends Activity {
 
         private void drawShelfEditor(Canvas c) {
             Paint heading = Ui.text(Ui.displaySemibold, 34 * k, 0xFFFFFFFF);
-            c.drawText(editingTop ? Ui.tr("Top Buttons") : Ui.tr("Shelf"), LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
+            // Whose shelf it is, once there's more than one profile (card 214a).
+            String shelfTitle = Profiles.list().size() > 1 ? Ui.trf("Shelf · {name}", "name", Profiles.name(Profiles.active())) : Ui.tr("Shelf");
+            c.drawText(editingTop ? Ui.tr("Top Buttons") : shelfTitle, LIST_X * k + 30 * k, (LIST_TOP - 24) * k, heading);
             int rows = rowCount();
             for (int i = 0; i < rows; i++) {
                 String[] app = shelfRows.get(pickScroll + i);
@@ -2369,16 +2653,21 @@ public class SettingsActivity extends Activity {
                 float base = rowRect.centerY() + Ui.halfCap(rowLabel);
                 c.drawText(labels[from + i], rowRect.left + 30 * k, base, rowLabel);
                 float right = rowRect.right - 30 * k;
-                if (!keys && !locked && from + i == WATCH_ROW) {
+                boolean profiles = screen == HOME_SETTINGS && from + i == PROFILES_ROW;
+                if (!keys && !locked && (from + i == WATCH_ROW || profiles)) {
                     float cw = Symbols.width(getContext(), "chevron_right", 22 * k);
                     Symbols.draw(getContext(), c, "chevron_right", right - cw / 2, rowRect.centerY(), 22 * k,
                             blend(watchOff ? 0x33FFFFFF : 0x66FFFFFF, watchOff ? 0x331C1C1E : 0x991C1C1E, f));
                     right -= cw + 16 * k;
                 }
                 // A long value (an update that failed, a city) stops short of its label.
-                float room = right - rowRect.left - 70 * k - rowLabel.measureText(labels[from + i]);
-                c.drawText(TextUtils.ellipsize(values[from + i], rowValueFit, room, TextUtils.TruncateAt.END).toString(),
-                        right, base, rowValue);
+                float room = right - rowRect.left - 70 * k - rowLabel.measureText(labels[from + i]) - (profiles ? 56 * k : 0);
+                String shown = TextUtils.ellipsize(values[from + i], rowValueFit, room, TextUtils.TruncateAt.END).toString();
+                c.drawText(shown, right, base, rowValue);
+                if (profiles) {   // the active profile's disk, left of its name
+                    int id = Profiles.active();
+                    drawDisk(c, right - rowValue.measureText(shown) - 34 * k, rowRect.centerY(), 20 * k, Profiles.colorValue(id), Profiles.initial(id));
+                }
             }
             Paint hint = Ui.text(Ui.regular, 23 * k, 0x8CFFFFFF);
             float hy = (LIST_TOP + 20 + rows * pitch + 36) * k;
@@ -2438,9 +2727,7 @@ public class SettingsActivity extends Activity {
             } else if (screen == PICKER && pickFor == PICK_LANGUAGE) {
                 Prefs.setLanguage(languageChoices()[pickScroll + focus]);
                 SleepOverlay.update(c);   // the pill speaks it too
-                focus = 0;
-                pickScroll = 0;
-                screen = HOME_SETTINGS;
+                showSettingsRow(LANGUAGE_ROW);
             } else if (screen == PICKER) {
                 int at = pickScroll + focus;
                 Prefs.setKeyApp(Prefs.KEYS[pickFor - 1], appPkgs.get(at));
@@ -2460,8 +2747,16 @@ public class SettingsActivity extends Activity {
                 openWatchApps();
             } else if (screen == REMOTE_KEYS) {
                 openPicker(focus + 1);
-            } else if (screen == HOME_SETTINGS && pickScroll + focus == 0) {
+            } else if (screen == HOME_SETTINGS && pickScroll + focus == LANGUAGE_ROW) {
                 openPicker(PICK_LANGUAGE);
+            } else if (screen == HOME_SETTINGS && pickScroll + focus == PROFILES_ROW) {
+                openProfiles(Profiles.active());
+            } else if (screen == PROFILES) {
+                activateProfiles();
+                return;
+            } else if (screen == PROFILE) {
+                activateProfile();
+                return;
             } else if (screen == HOME_SETTINGS && pickScroll + focus == CITY_ROW) {
                 askCity();
                 return;

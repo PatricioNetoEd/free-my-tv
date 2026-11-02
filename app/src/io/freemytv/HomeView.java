@@ -240,6 +240,26 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Map<Bitmap, Bitmap[]> crispLogos = new java.util.IdentityHashMap<>();
     /** The ones of those made here (Ui.downscale's copies), not the app's own logo when it was already the size. */
     private final Set<Bitmap> crispMade = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    /** The tile size and look crispLogos were made for: a new shelf at the same size keeps the apps that stay. */
+    private float crispW = -1, crispH = -1;
+    private HomeLayout crispLay;
+
+    // Profiles (card 214a): applied in place when the home screen shows again (no recreate, nothing fetched).
+    /** Profiles.stamp as last seen, the profile shown and its starting tab. */
+    private int profileStamp = Profiles.stamp, profileId = Profiles.active(), profileTab = Profiles.startTab();
+    /** Bumped at each switch: a LOADER answer read for an earlier profile leaves the shelf, All Apps and Continue alone. */
+    private int profileGen;
+    /** The profile a move started in: its new order is saved there. */
+    private int reorderProfile;
+    /** When the switch being applied started (uptime), until its first frame logs how long it took; 0: none. */
+    private long profileAt;
+    private final Runnable profileLogged = () -> {
+        if (profileAt == 0) return;
+        AppLog.w("profile: applied in " + (SystemClock.uptimeMillis() - profileAt) + " ms");
+        profileAt = 0;
+    };
+    /** The frame with the new shelf: after it's drawn (the next message), the time goes to the log. */
+    private final Choreographer.FrameCallback profileFrame = frameTimeNanos -> handler.post(profileLogged);
     /** Each app's tile like its Apple TV icon: brand colors (top, bottom) and logo (0 = as is, 1 = white, 2 = dark). */
     private static final Map<String, int[]> TILE_STYLE = new HashMap<>();
     static {
@@ -655,6 +675,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     HomeView(Activity a) {
         super(a);
         activity = a;
+        tab = profileTab;   // the profile's starting tab (Explore unless chosen)
         data = HomeData.get(a);
         recs = Recs.get(a);
         // The system services through the app's context, not the activity's: a manager made for the activity keeps it
@@ -762,6 +783,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         handler.postDelayed(tick, 15_000);
         playing.start();
         checkNotices();
+        checkProfile();     // before reload: its lists are then the new profile's
         hiddenNow.retainAll(Prefs.watchHidden());   // Home Settings may have shown the hidden ones again
         if (!again) reload();
         updatePalette();
@@ -825,8 +847,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     /**
-     * Starting state (Home pressed while the home screen is showing): first app focused, the first tab at its first
-     * pick, drawer and sheet closed.
+     * Starting state (Home pressed while the home screen is showing): first app focused, the profile's starting tab at
+     * its first pick, drawer and sheet closed.
      */
     void reset(boolean animated) {
         wake();
@@ -849,9 +871,64 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             pickIndex = 0;
             updatePicks();
         }
-        if (tab != 0) selectTab(0);
+        selectTab(Profiles.startTab());   // the profile's starting tab (Explore unless chosen)
         retarget(!animated);
         motionDirty = true;
+    }
+
+    // MARK: - Profiles (card 214a)
+
+    /** Home Settings switched profile (or changed the starting tab): applied here, in place, as the look is. */
+    private void checkProfile() {
+        if (profileStamp == Profiles.stamp) return;
+        profileStamp = Profiles.stamp;
+        int id = Profiles.active(), start = Profiles.tab(id);
+        if (id != profileId) {
+            profileId = id;
+            profileTab = start;
+            applyProfile();
+        } else if (start != profileTab) {
+            profileTab = start;
+            selectTab(start);
+        }
+    }
+
+    /**
+     * Another profile's shelf, All Apps without its apps, its Continue Watching and its starting tab, with no recreate
+     * and nothing fetched. The logos of apps both shelves have stay; only those that leave are freed (setShelf →
+     * layoutShelf). A LOADER answer read for the previous profile is dropped (profileGen), so it can't put that shelf
+     * back.
+     */
+    private void applyProfile() {
+        profileAt = SystemClock.uptimeMillis();
+        cancelReorder(true);
+        closeMenu(true);
+        handler.removeCallbacks(holdStart);
+        okHeld = holdArmed = false;
+        final int gen = ++profileGen;
+        hiddenNow.clear();   // hidden in this session: the previous profile's
+        final Context c = getContext().getApplicationContext();
+        final String mode = Prefs.topContent();
+        LOADER.execute(() -> {
+            final List<HomeApps.Item> s = HomeApps.shelf(c, false);   // logos already in cacheDir/logos, as at a cold start
+            handler.post(() -> {
+                if (destroyed || gen != profileGen) return;
+                setShelf(s);
+                reset(false);   // the first app focused, the profile's starting tab
+                showToast(Ui.trf("Profile: {name}", "name", Profiles.name(profileId)));   // TalkBack reads it too
+                invalidateAll();
+                Choreographer.getInstance().postFrameCallback(profileFrame);
+            });
+            final List<HomeApps.Item> o = HomeApps.others(c);
+            final boolean allowed = WatchNext.allowed(c);
+            final List<WatchNext.Item> w = mode.equals(Prefs.TOP_CONTINUE) ? WatchNext.load(c) : null;
+            handler.post(() -> {
+                if (destroyed || gen != profileGen) return;
+                if (!sheetOpen) setOthers(o);
+                else appsStale = true;
+                if (w != null) setTopContent(mode, w, allowed);
+            });
+        });
     }
 
     /** The round buttons at the top right (Settings > Top Buttons), with their names in the current language. */
@@ -1753,7 +1830,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             snap(tileRects[i]);
             x += tw + gap;
         }
-        releaseLogos();
+        releaseLeftLogos();
     }
 
     /**
@@ -1771,7 +1848,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         rowRim.setStyle(Paint.Style.STROKE);
         rowRim.setStrokeWidth(1);
         Symbols.warm(getContext(), "chevron_right", lay.chevron * k);
-        releaseLogos();
+        releaseLeftLogos();
         makeRowTiles();
     }
 
@@ -1834,6 +1911,37 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         crispMade.clear();
         crispLogos.clear();
         return n;
+    }
+
+    /**
+     * After the shelf's layout: at a new tile size or look every sized logo goes (releaseLogos); at the same size (a
+     * profile switch, an app installed or removed) only those of apps no longer on the shelf, so a switch between two
+     * profiles neither keeps both sets nor makes the shared ones again. Only this view's copies are recycled; the
+     * apps' own logos (HomeApps.LOGOS, shared with All Apps) never are.
+     */
+    private void releaseLeftLogos() {
+        float tw = tileRects.length == 0 ? -1 : tileRects[0].width(), th = tileRects.length == 0 ? -1 : tileRects[0].height();
+        if (tw != crispW || th != crispH || lay != crispLay) {
+            releaseLogos();
+            crispW = tw;
+            crispH = th;
+            crispLay = lay;
+            return;
+        }
+        if (crispLogos.isEmpty()) return;
+        Set<Bitmap> keep = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (HomeApps.Item it : shelf) {
+            if (it.logo != null) keep.add(it.logo);
+            if (it.logoDark != null) keep.add(it.logoDark);
+        }
+        for (java.util.Iterator<Map.Entry<Bitmap, Bitmap[]>> i = crispLogos.entrySet().iterator(); i.hasNext(); ) {
+            Map.Entry<Bitmap, Bitmap[]> e = i.next();
+            if (keep.contains(e.getKey())) continue;
+            for (Bitmap b : e.getValue()) {
+                if (b != null && crispMade.remove(b)) b.recycle();
+            }
+            i.remove();
+        }
     }
 
     /** Scrolls the shelf, one app at a time, so the focused app is shown: the tiles slide there (unless `snap`). */
@@ -2982,7 +3090,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void reload() {
         final Context c = getContext().getApplicationContext();
-        final int orderAtLoad = orderRevision;
+        final int orderAtLoad = orderRevision, gen = profileGen;
         // The shelf and All Apps (100 to 500 ms of package queries on a TV) only when they can have changed.
         long up = SystemClock.uptimeMillis();
         final boolean apps = appsStale || Prefs.version != appsVersion || Ui.generation != appsGeneration
@@ -3007,13 +3115,15 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 if (destroyed) return;   // a newer home screen reads its own lists
                 // A provider/package refresh must not cancel a drag or undo a move that was just saved.
                 boolean keepOrder = reordering || pendingOrderSaves > 0 || orderAtLoad != orderRevision;
+                // Read for a profile that's no longer shown: its shelf, All Apps and Continue Watching stay out.
+                boolean oldProfile = gen != profileGen;
                 if (top != null && !keepOrder) setLightButtons(top);
-                setTopContent(mode, w, allowed);
-                if (s != null && !keepOrder) setShelf(s);
-                if (apps && keepOrder) appsStale = true;
+                if (!oldProfile) setTopContent(mode, w, allowed);
+                if (s != null && !keepOrder && !oldProfile) setShelf(s);
+                if (apps && (keepOrder || oldProfile)) appsStale = true;
                 setStatusItems(st);
                 setDrawerItems(d);
-                if (o != null && !sheetOpen) setOthers(o);
+                if (o != null && !sheetOpen && !oldProfile) setOthers(o);
                 else if (o != null) appsStale = true;   // All Apps is open: its list comes next time
             });
         });
@@ -3698,10 +3808,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         toggledAt = SystemClock.uptimeMillis();
         final HomeApps.Item it = others.get(gridIndex);
         final Context c = getContext().getApplicationContext();
+        final int profile = profileId;   // saved in the profile shown now, whatever is active when LOADER gets to it
         click.open();
         LOADER.execute(() -> {
             // On the shelf means shown there: installed and within the limit, as in Settings > Shelf.
-            List<String> list = new ArrayList<>(HomeApps.shelfPackages(c));
+            List<String> list = new ArrayList<>(HomeApps.shelfPackages(c, profile));
             PackageManager pm = c.getPackageManager();
             int max = HomeApps.maxShelf(c), shown = 0;
             boolean on = false;
@@ -3723,7 +3834,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 list.add(it.pkg);
                 text = Ui.trf("Added to the shelf: {app}", "app", it.label);
             }
-            Prefs.setShelf(list);   // here, so the next hold reads the new list
+            Prefs.setShelf(profile, list);   // here, so the next hold reads the new list
             handler.post(() -> {
                 if (destroyed) return;   // saved above; the new home screen reads it
                 shelfEdited = true;
@@ -3750,6 +3861,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         cancelReorder(true);   // settle an earlier drop before lifting another row
         wake();
         reorderTop = zone == Z_TOP;
+        reorderProfile = profileId;
         orderRevision++;
         reordering = reorderAnim = okHeld = true;
         reorderOrigin = new ArrayList<>(reorderTop ? lightButtons : shelf);
@@ -3871,11 +3983,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         for (HomeApps.Item it : shelf) order.add(it.pkg);
         final Context c = getContext().getApplicationContext();
+        final int profile = reorderProfile;   // where the move started, not whatever profile is active at the save
         pendingOrderSaves++;
         LOADER.execute(() -> {
             // The saved list may hold more than the shelf shows (apps not installed, past the limit): the shown ones
             // take their new order in the same slots, the others stay where they were.
-            List<String> all = HomeApps.shelfPackages(c), out = new ArrayList<>(all);
+            List<String> all = HomeApps.shelfPackages(c, profile), out = new ArrayList<>(all);
             int next = 0;
             for (int s = 0; s < out.size() && next < order.size(); s++) {
                 if (order.contains(out.get(s))) out.set(s, order.get(next++));
@@ -3886,7 +3999,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
             final List<String> save = out;
             handler.post(() -> {
-                Prefs.setShelf(save);
+                Prefs.setShelf(profile, save);
                 pendingOrderSaves--;
                 if (appsStale && running) reloadSoon();
             });
