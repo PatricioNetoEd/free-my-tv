@@ -628,6 +628,43 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .look-new .key .label, .look-new .panel .side, .look-new #weather .range, .look-new #weather .hour .t,
 .look-new #weather .hour .low, .look-new #weather .sun, .look-new #prices .coin .c, .look-new .box .hint { font-size: 24px; }
 
+/* Nova's row (card 203, design/203): five 300 x 169 tiles from x = 96 at y = 820, radius 28, on the sky (no glass).
+   Each tile holds its focus shadow (.lift, by opacity) under its face (.art); focused, it grows 10% (today's focus at
+   Nova's scale, until card 204). At night a 1 px inner rim keeps dark tiles apart from the dark sky. */
+.look-new #platter { background: none; box-shadow: none; border-radius: 0; pointer-events: none; }
+.look-new .more, .look-new.night .more { color: #7A7A80; }
+.look-new .tile, .look-new .tile.focus, .look-new.night .tile, .look-new.night .tile.focus {
+  overflow: visible;
+  border-radius: 28px;
+  box-shadow: none;
+}
+.look-new .tile::after { display: none; }
+.look-new .tile.focus { -webkit-transform: scale(1.1); transform: scale(1.1); }
+.tile .lift, .tile .art { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 28px; }
+.tile .lift { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34); opacity: 0; -webkit-transition: opacity 0.2s; transition: opacity 0.2s; }
+.night .tile .lift { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6); }
+.tile.focus .lift { opacity: 1; }
+.tile .art { overflow: hidden; box-shadow: 0 4px 22px rgba(0, 0, 0, 0.14); }
+.night .tile .art { box-shadow: 0 4px 22px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+.tile .art::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  height: 50%;
+  background: -webkit-linear-gradient(top, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+  background: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+  opacity: 0;
+  -webkit-transition: opacity 0.17s;
+  transition: opacity 0.17s;
+}
+.tile.focus .art::after { opacity: 1; }
+.tile .mark { position: absolute; background-repeat: no-repeat; background-position: 0 0; }
+.look-new .tile img { max-width: 72%; max-height: 50%; }
+.look-new .tile .word { left: 10%; right: 10%; margin-top: -24px; height: 48px; line-height: 48px; }
+.look-new .tile .word.shade { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
+
 /* MARK: - Toast */
 
 #toast {
@@ -657,10 +694,26 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 /* Tizen 2 and 1 GB TVs (see tv.js): no shadows or animations; their GPUs can't keep up while the focus moves. */
 .lite * { box-shadow: none !important; -webkit-transition: none !important; transition: none !important; }
+/* Nova's tiles there: no shadow, glow or text shadow; a 3 px white ring on the focused one, a 1 px border at night. */
+.lite .tile .lift, .lite .tile .art::after { display: none; }
+.lite .look-new .tile .word.shade { text-shadow: none; }
+.lite .night .tile .art::before, .lite .tile.focus .art::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 28px;
+  z-index: 1;
+}
+.lite .tile.focus .art::before, .lite .night .tile.focus .art::before { border: 3px solid #FFF; }
 
 /* Samsungs up to 2 GB (see tv.js): the parts that move lose their soft shadows, which the TV repainted on every frame of
    a move, and what slides is a layer from the start, so a move starts at once. */
 .flat .tab, .flat .card .img, .flat .tile, .flat .key { box-shadow: none !important; }
+.flat .tile .lift { -webkit-transition: none; transition: none; }
 .flat .cell.focus .face { box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.4) !important; }
 .flat #home, .flat #drawer, .flat #cards, .flat .card, .flat #tiles, .flat .tile { will-change: transform; }
 .flat #top { will-change: opacity; }
