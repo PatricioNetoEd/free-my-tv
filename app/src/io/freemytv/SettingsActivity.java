@@ -2260,9 +2260,17 @@ public class SettingsActivity extends Activity {
                     final int from = Profiles.active();
                     // The shelf to copy, resolved off the UI thread (the built-in list asks the PackageManager ~30 times).
                     new Thread(() -> {
-                        final List<String> shelf = HomeApps.shelfPackages(c, from);
+                        List<String> read;
+                        try {
+                            read = HomeApps.shelfPackages(c, from);
+                        } catch (RuntimeException e) {   // nothing may escape: :home's watchdog counts it as a crash
+                            AppLog.w("profiles: shelf not read: " + e);
+                            read = null;
+                        }
+                        final List<String> shelf = read;
                         handler.post(() -> {
                             creating = false;
+                            if (shelf == null || activity.isFinishing() || activity.isDestroyed()) return;
                             if (Profiles.active() != from) return;   // can't happen from here; never copy another's
                             int id = Profiles.create(name, shelf);
                             if (id < 0) return;
