@@ -58,3 +58,11 @@ Google TV / Android TV e LG/Samsung.
 - **desenvolvedor:** branch `feat/204`.
 - **validador:** `review/204.md`.
 - **testador:** M1 a M4 e o vídeo.
+
+## Herdado da revisão do 203 (review/203.md, 2026-11-02)
+
+- Arredondar o raio do tile a 720p (`HomeView.java` ~2151: 18,67 → 19).
+- As cópias do logo no tamanho de foco são feitas no 1º `onDraw` que as usa (como a Clássica já fazia): medir os
+  travados do 1º foco em cada app na TCL e, se pesar, gerar no layout.
+- Seta da fileira no web em `top` 72,5 px (`web/home.js` ~659): arredondar.
+- `makeRowTiles` roda 2× quando entram apps novos (`HomeView.java` ~1721 e ~1775): deixar uma.

@@ -3,6 +3,8 @@
  * Back. Everything drawn here is CSS and text: no images, logos or anything from the network (the font is the repo's own
  * Inter, see proto.css). Brand names and colors come from web/home.js (SHELF) and design/tokens.json; picks are
  * invented titles over CSS gradients. The speed test is simulated: nothing is downloaded.
+ * Key 3 (or #card=203) shows only what card 203 ships (design/203-tiles-grandes.md): today's Nova (202: sky, top bar,
+ * "Para você" and the picks cards) with the big tiles in their final place; no band, no TV info line, no profiles.
  */
 (function () {
   'use strict';
@@ -104,21 +106,21 @@
     ['spotify', 'Spotify', ['#1DB954', '#0F7A36'], '#FFFFFF', true],
     ['clarotv', 'Claro tv+', ['#1C1C1C', '#0B0B0B'], '#E3262E'],
     ['discoveryplus', 'discovery+', ['#211E2A', '#09080D'], '#FFFFFF'],
-    ['hulu', 'Hulu', ['#1CE783', '#0B8F4E'], '#FFFFFF', true],
+    ['hulu', 'Hulu', ['#1CE783', '#0B8F4E'], '#1D1D1F'],
     ['paramount', 'Paramount+', ['#0064FF', '#002A86'], '#FFFFFF'],
     ['peacock', 'Peacock', ['#1C1C1E', '#000000'], '#FFFFFF'],
     ['nfl', 'NFL', ['#013369', '#00163D'], '#FFFFFF'],
     ['jellyfin', 'Jellyfin', ['#AA5CC3', '#00A4DC'], '#FFFFFF', true],
-    ['browser', 'Navegador', ['#2C2C2E', '#161618'], '#FFFFFF'],
-    ['files', 'Arquivos', ['#2C2C2E', '#161618'], '#FFFFFF'],
-    ['photos', 'Fotos', ['#2C2C2E', '#161618'], '#FFFFFF'],
-    ['music', 'Música', ['#2C2C2E', '#161618'], '#FFFFFF'],
-    ['radio', 'Rádio', ['#2C2C2E', '#161618'], '#FFFFFF'],
-    ['games', 'Jogos', ['#2C2C2E', '#161618'], '#FFFFFF'],
-    ['news', 'Notícias', ['#2C2C2E', '#161618'], '#FFFFFF'],
-    ['podcasts', 'Podcasts', ['#2C2C2E', '#161618'], '#FFFFFF'],
-    ['store', 'Loja', ['#2C2C2E', '#161618'], '#FFFFFF'],
-    ['camera', 'Câmera', ['#2C2C2E', '#161618'], '#FFFFFF']
+    ['browser', 'Navegador', ['#2A2A2E', '#161618'], '#FFFFFF'],
+    ['files', 'Arquivos', ['#2A2A2E', '#161618'], '#FFFFFF'],
+    ['photos', 'Fotos', ['#2A2A2E', '#161618'], '#FFFFFF'],
+    ['music', 'Música', ['#2A2A2E', '#161618'], '#FFFFFF'],
+    ['radio', 'Rádio', ['#2A2A2E', '#161618'], '#FFFFFF'],
+    ['games', 'Jogos', ['#2A2A2E', '#161618'], '#FFFFFF'],
+    ['news', 'Notícias', ['#2A2A2E', '#161618'], '#FFFFFF'],
+    ['podcasts', 'Podcasts', ['#2A2A2E', '#161618'], '#FFFFFF'],
+    ['store', 'Loja', ['#2A2A2E', '#161618'], '#FFFFFF'],
+    ['camera', 'Câmera', ['#2A2A2E', '#161618'], '#FFFFFF']
   ];
 
   // Scenes: [base angle, base stops, spots [x%, y%, rgba, size%]]
@@ -194,12 +196,15 @@
 
   // MARK: - State
 
-  var Z = {TOP: 'top', BAND: 'band', ROW: 'row', DRAWER: 'drawer', APPS: 'apps', PROFILES: 'profiles'};
+  var Z = {TOP: 'top', BAND: 'band', ROW: 'row', DRAWER: 'drawer', APPS: 'apps', PROFILES: 'profiles', CARDS: 'cards'};
   // st.top: 0-2 tabs, 3 the speed item (the info line's only focus), 4-6 Live TV / Inputs / Settings, 7 the profile
   var SPEED = 3, FIRST_BUTTON = 4, PROFILE_BUTTON = 7;
-  var st = {zone: Z.ROW, top: 0, tab: 0, row: 0, band: 0, drawer: 0, grid: 0, profile: 0, pick: 0};
+  var st = {zone: Z.ROW, top: 0, tab: 0, row: 0, band: 0, drawer: 0, grid: 0, profile: 0, pick: 0, card: 0};
   // speed: the simulated network for the speed item (V): tested 2 h ago, never tested, the test fails, no network
-  var opt = {night: null, perf: 'normal', key: true, cont: true, hd: false, speed: 0, single: false};
+  // card: 0 the whole Nova, 203 only what card 203 ships; art: 'logo' (stand-in for the lifted logo) or 'names' (every
+  // tile as the no-logo fallback: Samsung without a bundled icon); guides: safe area, grid and logo boxes
+  var opt = {night: null, perf: 'normal', key: true, cont: true, hd: false, speed: 0, single: false, card: 0, art: 'logo', guides: false};
+  function only203() { return opt.card === 203; }
   var fav = [], others = [];
   var owner = null, items = [], followTimer = 0, followPending = false, lastDir = 0;
   var stage = $('stage');
@@ -217,7 +222,8 @@
     return false;
   }
 
-  function appOf(p) { return {key: p[0], name: p[1], tile: p[2], word: p[3], shade: !!p[4]}; }
+  /** generic: an app with no brand (no gradient of its own, no logo): it always shows its name (card 203). */
+  function appOf(p) { return {key: p[0], name: p[1], tile: p[2], word: p[3], shade: !!p[4], generic: p[2][0] === '#2A2A2E'}; }
 
   function tabKind() { return [null, 'movie', 'tv'][st.tab]; }
 
@@ -538,6 +544,9 @@
   function tickClock() {
     var d = new Date();
     $('clock').textContent = d.getHours() + ':' + pad(d.getMinutes());
+    // Today's Nova without picks (no TMDB key): the big clock and the date where the cards would be.
+    document.querySelector('#today .time').textContent = d.getHours() + ':' + pad(d.getMinutes());
+    document.querySelector('#today .date').textContent = WEEKDAYS[d.getDay()] + ', ' + d.getDate() + ' de ' + MONTHS[d.getMonth()];
     // The buttons sit left of the clock, 32 apart (the clock's width changes with the time).
     $('buttons').style.right = (96 + $('clock').offsetWidth + 32) + 'px';
     showSpeed();   // "há 2 h" moves on; the fit follows the buttons
@@ -550,11 +559,19 @@
   function tileFace(app, holder) {
     var t = el('div', 'tile', holder);
     el('div', 'shadow', t);
-    var face = el('div', 'face', t);
+    var face = el('div', 'face' + (app.generic ? '' : ' has-mark'), t);
     paint(face, [linear(180, [app.tile[0], app.tile[1]])]);
+    // The name when there is no logo: Inter 700, fitted to 80% of the width, 24 to 40 px (ellipsis under 24).
     var w = el('div', 'word' + (app.shade ? ' shade' : ''), face, app.name);
     w.style.color = app.word;
     w.style.fontSize = Math.max(24, Math.min(40, Math.floor(300 * 0.8 / (Math.max(4, app.name.length) * 0.56)))) + 'px';
+    // Card 203's stand-in for the lifted logo (no brand art in the repo): the name filling the logo box, 216 x 85 at
+    // most (72% x 50% of the tile). The real logo is the TV's own, sized by its ink (14% of the tile) and SHELF's scale.
+    var m = el('div', 'mark', face, app.name);
+    m.style.color = app.word;
+    m.style.fontSize = Math.min(64, Math.floor(216 / (Math.max(3, app.name.length) * 0.6))) + 'px';
+    el('div', 'lbox', face);
+    el('div', 'glow', face);
     el('div', 'sheen', face);
     return t;
   }
@@ -776,6 +793,9 @@
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.ROW && st.row === i);
     placeRow();
     setClass(stage, 'band-focus', st.zone === Z.BAND);
+    list = document.querySelectorAll('#today .card');
+    for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.CARDS && st.card === i);
+    layoutCards();
     placeDots();
     list = document.querySelectorAll('#drawer .key');
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.DRAWER && st.drawer === i);
@@ -798,6 +818,7 @@
   function minTop() { return opt.key ? 0 : SPEED; }
 
   function move(dx, dy) {
+    if (only203() && move203(dx, dy)) { updateFocus(); return; }
     switch (st.zone) {
       case Z.ROW:
         if (dx) {
@@ -843,9 +864,96 @@
     updateFocus();
   }
 
+  // MARK: - Card 203 cut: today's Nova (202) around the big tiles
+
+  var todayCards = [];
+  var WEEKDAYS = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+  var MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+  /** Today's picks cards ("Para você", filtered by the tab), as the 202 Nova draws them at y 262-704. */
+  function renderCards() {
+    todayCards = opt.key ? picksOf(null) : [];
+    var holder = document.querySelector('#today .cards');
+    holder.innerHTML = '';
+    for (var i = 0; i < todayCards.length; i++) {
+      var c = el('div', 'card', holder), img = el('div', 'img', c);
+      paint(img, ART[todayCards[i].art]);
+      el('div', 'ring', c);
+      el('div', 'name', c, todayCards[i].title);
+      el('div', 'meta', c, todayCards[i].meta);
+    }
+    st.card = Math.max(0, Math.min(st.card, todayCards.length - 1));
+    setClass(stage, 'no-picks', !todayCards.length);
+    if (st.zone === Z.CARDS && !todayCards.length) st.zone = Z.ROW;
+    layoutCards();
+  }
+
+  var cardScroll = 0;
+
+  /** The focused card is wide (1008), the others posters (320), 40 apart from x=96; the row scrolls past the 3rd. */
+  function layoutCards() {
+    var nodes = document.querySelectorAll('#today .card'), left = 96;
+    cardScroll = Math.max(0, st.card - 2) * 360;
+    for (var i = 0; i < nodes.length; i++) {
+      var wide = i === st.card, w = wide ? 1008 : 320;
+      nodes[i].style.left = left + 'px';
+      nodes[i].style.width = w + 'px';
+      setClass(nodes[i], 'wide', wide);
+      left += w + 40;
+    }
+    transform(document.querySelector('#today .cards'), 'translateX(' + (-cardScroll) + 'px)');
+    // The sky takes the focused pick's colors under a veil, as today's blurred backdrop.
+    if (todayCards[st.card]) paint(document.querySelector('#today .back'), ART[todayCards[st.card].art]);
+  }
+
+  function cardCenter(i) {
+    var n = document.querySelectorAll('#today .card')[i];
+    return n ? n.offsetLeft - cardScroll + n.offsetWidth / 2 : 0;
+  }
+
+  function tileCenter(i) { return 96 + (i - first) * 357 + 150; }
+
+  /** Today's navigation (web/home.js move()) with the new tiles; the band, the speed item and the profile aren't here. */
+  function move203(dx, dy) {
+    var i, best, bestD;
+    switch (st.zone) {
+      case Z.ROW:
+        if (dx || dy > 0) return false;   // along the row and the drawer: as the whole Nova
+        if (todayCards.length) {
+          st.zone = Z.CARDS; best = 0; bestD = 1e9;
+          for (i = 0; i < todayCards.length; i++) if (Math.abs(cardCenter(i) - tileCenter(st.row)) < bestD) { bestD = Math.abs(cardCenter(i) - tileCenter(st.row)); best = i; }
+          st.card = best;
+        } else { st.zone = Z.TOP; st.top = opt.key ? st.tab : FIRST_BUTTON; }
+        return true;
+      case Z.CARDS:
+        if (dx) st.card = Math.max(0, Math.min(todayCards.length - 1, st.card + dx));
+        else if (dy < 0) { st.zone = Z.TOP; st.top = st.tab; }
+        else if (fav.length) {
+          var cx = cardCenter(st.card), n = Math.min(5, fav.length);
+          st.zone = Z.ROW;
+          st.row = first + Math.max(0, Math.min(n - 1, Math.round((cx - 96 - 150) / 357)));
+          followSoon();
+        }
+        return true;
+      case Z.TOP:
+        if (dx) {
+          var to = st.top + dx;
+          if (to === SPEED) to += dx;   // the TV info line is card 208's
+          st.top = Math.max(opt.key ? 0 : FIRST_BUTTON, Math.min(FIRST_BUTTON + 2, to));
+          if (st.top < SPEED && st.top !== st.tab) { st.tab = st.top; st.card = 0; renderCards(); }
+        } else if (dy > 0) {
+          if (todayCards.length) { st.zone = Z.CARDS; st.card = st.top < SPEED ? 0 : todayCards.length - 1; }
+          else st.zone = Z.ROW;
+        }
+        return true;
+    }
+    return false;
+  }
+
   /** Down from the band or the top, and Back: the row, on the app the band belongs to. */
   function backToRow() {
     st.zone = Z.ROW;
+    if (only203()) return;   // no band: the row keeps the app it had
     for (var i = 0; i < fav.length; i++) if (fav[i] === owner) st.row = i;
   }
 
@@ -869,6 +977,7 @@
         if (d.run) { d.run(); updateFocus(); } else toast(d.off ? d.label + ': sem sinal' : 'Abriria ' + d.label);
         return;
       case Z.APPS: toast('Abriria ' + others[st.grid].name); return;
+      case Z.CARDS: toast('Abriria “' + todayCards[st.card].title + '” no ' + todayCards[st.card].app.name); return;
       case Z.PROFILES:
         if (st.pick < PROFILES.length) choose(st.pick);
         else toast('Abriria “Adicionar perfil”: nome e cor; começa com a fileira de ' + profile().name + ' (card 214)');
@@ -881,7 +990,7 @@
     if (st.zone === Z.PROFILES) closeProfiles(profilesFrom);   // nothing changes
     else if (st.zone === Z.APPS) closeApps();
     else if (st.zone === Z.DRAWER) closeDrawer();
-    else if (st.zone === Z.BAND || st.zone === Z.TOP) backToRow();
+    else if (st.zone === Z.BAND || st.zone === Z.TOP || st.zone === Z.CARDS) backToRow();
     else toast('Voltar na fileira: nada (já é o Início)');
     updateFocus();
   }
@@ -898,6 +1007,7 @@
   // MARK: - Prototype switches
 
   var COUNTS = [10, 20, 3, 8];
+  var COUNTS_203 = [3, 8, 12];   // card 203: no scrolling, one window and a half, more than two windows
 
   function setup() {
     fav = rowOf(profile());
@@ -906,6 +1016,7 @@
     st.row = Math.min(st.row, fav.length - 1);
     renderRow();
     renderApps();
+    renderCards();
     followNow();
     updateFocus();
     $('bApps').textContent = 'Apps: ' + fav.length + ' (A)';
@@ -923,6 +1034,12 @@
     setClass(stage, 'lite', opt.perf === 'lite');
     setClass(stage, 'no-key', !opt.key);
     setClass(stage, 'hd', opt.hd);
+    setClass(stage, 'c203', only203());
+    setClass(stage, 'names', opt.art === 'names');
+    setClass(stage, 'guides', opt.guides);
+    $('b203').textContent = 'Recorte: ' + (only203() ? 'só o card 203' : 'Nova completa') + ' (3)';
+    $('bArt').textContent = 'Arte: ' + (opt.art === 'names' ? 'só nome' : 'logo') + ' (T)';
+    $('bGuide').textContent = 'Guias: ' + (opt.guides ? 'sim' : 'não') + ' (G)';
     $('bNight').textContent = (isNight() ? 'Noite' : 'Dia') + ' (N)';
     $('bPerf').textContent = 'Modo: ' + opt.perf + ' (L)';
     $('bKey').textContent = 'Chave TMDB: ' + (opt.key ? 'sim' : 'não') + ' (K)';
@@ -940,28 +1057,30 @@
     k: function () {
       opt.key = !opt.key;
       if (!opt.key && st.zone === Z.TOP && st.top < SPEED) st.top = SPEED;
-      applyLook(); followNow();
+      applyLook(); followNow(); renderCards();
       if (st.zone === Z.BAND && !bandFocusable()) backToRow();
+      if (only203() && st.zone === Z.TOP && st.top === SPEED) st.top = FIRST_BUTTON;
       updateFocus();
     },
     a: function () {
-      // the active profile's count: 10 -> 20 -> 3 -> 8 (a count not on that list goes to 10)
-      var p = profile(), n = p.count || p.keys.length;
-      p.count = COUNTS[(COUNTS.indexOf(n) + 1) % COUNTS.length];
+      // the active profile's count: 10 -> 20 -> 3 -> 8 (a count not on that list goes to 10); card 203: 3 -> 8 -> 12
+      var p = profile(), n = p.count || p.keys.length, list = only203() ? COUNTS_203 : COUNTS;
+      p.count = list[(list.indexOf(n) + 1) % list.length];
       if (st.zone === Z.APPS) closeApps();
       if (st.zone === Z.PROFILES) closeProfiles(Z.ROW);
       if (st.zone !== Z.DRAWER) st.zone = Z.ROW;
       st.row = 0; setup(); applyLook();
     },
-    p: function () { openProfiles(); updateFocus(); },
+    p: function () { if (outside203('Perfis')) return; openProfiles(); updateFocus(); },
     c: function () {
       opt.cont = !opt.cont; applyLook(); followNow();
       if (st.zone === Z.BAND && !bandFocusable()) backToRow();
       updateFocus();
     },
     r: function () { opt.hd = !opt.hd; applyLook(); },
-    v: function () { setNet((opt.speed + 1) % NETS.length); showSpeed(); updateFocus(); },
+    v: function () { if (outside203('Velocidade')) return; setNet((opt.speed + 1) % NETS.length); showSpeed(); updateFocus(); },
     u: function () {
+      if (outside203('Perfis')) return;
       opt.single = !opt.single;
       PROFILES = opt.single ? ALONE : HOUSE;
       st.profile = 0; st.tab = opt.key ? profile().tab : 0;
@@ -970,8 +1089,24 @@
       if (st.zone !== Z.DRAWER) st.zone = Z.ROW;
       st.row = 0; setup(); applyLook();
     },
-    o: function () { fullStart(); }
+    o: function () { if (outside203('Perfis ao ligar')) return; fullStart(); },
+    3: function () {
+      opt.card = only203() ? 0 : 203;
+      if (st.zone === Z.PROFILES) closeProfiles(Z.ROW);
+      if (st.zone === Z.BAND || st.zone === Z.CARDS) st.zone = Z.ROW;
+      if (st.zone === Z.TOP && (st.top === SPEED || st.top === PROFILE_BUTTON)) st.top = FIRST_BUTTON;
+      applyLook(); followNow(); updateFocus();
+    },
+    t: function () { opt.art = opt.art === 'logo' ? 'names' : 'logo'; applyLook(); },
+    g: function () { opt.guides = !opt.guides; applyLook(); }
   };
+
+  /** In the card 203 cut, what other cards bring stays out (a note instead). */
+  function outside203(what) {
+    if (!only203()) return false;
+    toast(what + ': fora do recorte 203 (tecla 3 volta à Nova completa)');
+    return true;
+  }
 
   function bind(id, key) {
     var b = $(id);
@@ -1007,7 +1142,7 @@
   window.onresize = fit;
   window.addEventListener('load', tickClock);   // Inter changes the clock's width once it loads
   bind('bNight', 'n'); bind('bPerf', 'l'); bind('bKey', 'k'); bind('bApps', 'a'); bind('bCont', 'c'); bind('b720', 'r'); bind('bProf', 'p');
-  bind('bSpeed', 'v'); bind('bAlone', 'u'); bind('bStart', 'o');
+  bind('bSpeed', 'v'); bind('bAlone', 'u'); bind('bStart', 'o'); bind('b203', '3'); bind('bArt', 't'); bind('bGuide', 'g');
   var chevs = document.querySelectorAll('.chev');
   glyph('left', 24, chevs[0]);
   glyph('right', 24, chevs[1]);
@@ -1015,6 +1150,7 @@
    * A state from the address, for screenshots: #night=1&perf=lite&key=0&apps=20&cont=0&hd=1&profile=1&speed=2&single=1
    * &start=1&keys=rrru (keys: l r u d = arrows, o = OK, b = Back, p = the profiles sheet; apps= sets Ana's count;
    * speed= 0 tested, 1 never, 2 the test fails, 3 no network; single=1 only Principal; start=1 a full start).
+   * Card 203: card=203 (only what 203 ships), art=names (every tile as the no-logo fallback), guides=1, apps=3|8|12.
    */
   function fromHash() {
     var parts = location.hash.replace(/^#/, '').split('&'), keys = '';
@@ -1026,7 +1162,10 @@
       else if (kv[0] === 'key') opt.key = v !== '0';
       else if (kv[0] === 'cont') opt.cont = v !== '0';
       else if (kv[0] === 'hd') opt.hd = v === '1';
-      else if (kv[0] === 'apps' && COUNTS.indexOf(+v) >= 0) PROFILES[0].count = +v;
+      else if (kv[0] === 'apps' && (COUNTS.indexOf(+v) >= 0 || COUNTS_203.indexOf(+v) >= 0)) PROFILES[0].count = +v;
+      else if (kv[0] === 'card') opt.card = v === '203' ? 203 : 0;
+      else if (kv[0] === 'art') opt.art = v === 'names' ? 'names' : 'logo';
+      else if (kv[0] === 'guides') opt.guides = v === '1';
       else if (kv[0] === 'speed' && NETS[+v]) setNet(+v);
       else if (kv[0] === 'single' && v === '1') { opt.single = true; PROFILES = ALONE; }
       else if (kv[0] === 'start') start = v === '1';
@@ -1045,7 +1184,7 @@
       else if (c === 'd') move(0, 1);
       else if (c === 'o') ok();
       else if (c === 'b') back();
-      else if (c === 'p') { openProfiles(); updateFocus(); }
+      else if (c === 'p' && !only203()) { openProfiles(); updateFocus(); }
     }
   }
 

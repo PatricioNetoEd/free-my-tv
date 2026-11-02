@@ -1,6 +1,6 @@
 # 203 · Tiles grandes e arredondados na fileira de apps
 
-Risco normal (não toca `DEBLOAT`, `PROTECTED`, `Adb.java`, `Watchdog.java` nem o modo *Original*) · Status: proposto ·
+Risco normal (não toca `DEBLOAT`, `PROTECTED`, `Adb.java`, `Watchdog.java` nem o modo *Original*) · Status: aprovado pelo dono (2026-11-02) ·
 Fase 2 · Depende de: 202
 
 ## Objetivo
@@ -63,3 +63,9 @@ Google TV / Android TV e LG/Samsung.
 ## Herdado da revisão do 202 (2026-11-01)
 
 - Criar `Ui.displayBold` (Inter peso 700) para o nome no tile (e o título da faixa no 206).
+
+## Aprovação do dono (2026-11-02)
+
+Recorte do protótipo (`design/203-tiles-grandes.md`, `#card=203`) aprovado, com os padrões do designer: foco
+provisório 1,10 até o 204; setas de "há mais" nas margens até o 206; app fora da lista de marcas mostra o nome sobre
+o cinza escuro; degradê de marca para Hulu, Paramount+, Peacock e Spotify fica para um card pequeno depois.

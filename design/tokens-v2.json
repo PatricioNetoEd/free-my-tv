@@ -106,7 +106,8 @@
       "grid": { "columns": 5, "column": 300, "gutter": 57, "width": 1728, "note": "the 5 tiles span the safe width exactly; hero text, row, drawer and All Apps align to x=96" },
       "top_bar": { "y": 60, "h": 64, "tabs_x": 96, "tab_h": 56, "tab_pad_x": 24, "tab_gap": 8, "info_gap": 32, "info_sep": " · ", "speed_h": 56, "speed_pad_x": 20, "speed_progress": [120, 4], "info_min_gap_to_buttons": 32, "button": 64, "button_gap": 20, "clock_right": 1824, "clock_gap": 32, "tip_y": 150 },
       "band": { "image": [0, 0, 1920, 820], "fade_y": [640, 820], "text_x": 96, "text_max_w": 960, "eyebrow_baseline": 410, "title_last_baseline": 500, "meta_baseline": 552, "action_y": 584, "action_h": 56, "dots_y": 612, "dot": 10, "dot_gap": 14 },
-      "row": { "y": 820, "tile": [300, 169], "gap": 57, "visible": 5, "chevron_y": 770, "chevron": 24, "note": "left-aligned at x=96 (3 apps: three tiles on the left, no centering)" },
+      "row": { "y": 820, "tile": [300, 169], "gap": 57, "visible": 5, "chevron_y": 770, "chevron": 24, "note": "left-aligned at x=96 (3 apps: three tiles on the left, no centering)",
+        "card_203": { "chevron_x": [54, 1842], "chevron_cy": 904, "until": "206", "why": "until the band (206) the picks' names and metas of today's Nova sit at y 727-790 from x=96, where chevron_y 770 would land; card 206 moves them to chevron_y" } },
       "drawer": { "shift": 560, "group_title_baseline": 500, "keys_y": 520, "key_h": 140, "key_w_max": 240, "key_gap": 18, "group_gap": 56, "panels_y": 704, "panel_h": 300, "panel_gap": 32 },
       "all_apps": { "title_y": 84, "grid_x": 96, "grid_y": 184, "cell": [300, 169], "col_step": 357, "row_step": 240, "label_dy": 186, "visible_rows": 3.5 }
     },
@@ -116,6 +117,10 @@
       "grid": { "column": 200, "gutter": 38 },
       "tile": [200, 113],
       "tile_focus": [220, 124],
+      "tile_radius": 19,
+      "row": { "y": 547, "gap": 38, "x": 64, "chevron": 16, "chevron_y": 513, "card_203": { "chevron_x": [36, 1228], "chevron_cy": 603 } },
+      "logo_box_max": { "rest": [144, 56], "focus": [158, 62] },
+      "tile_word": { "size_min": 16, "size_max": 27 },
       "band_image": [1280, 547],
       "band_title": 53, "band_meta": 19, "min_text": 16,
       "info_line": 16, "speed_h": 37, "speed_pad_x": 13, "speed_progress": [80, 3], "kids_badge_sheet": 29, "kids_badge_button": 15,
@@ -135,7 +140,18 @@
     "no_logo": "the app name in type.tile_word on the gradient; on light gradients (Prime, Globoplay, Spotify) a static 0 1px 2px rgba(0,0,0,0.35) text shadow (lite: none; the word sits mid-gradient, 3.1-3.7:1)",
     "cache": "rest and focus bitmaps at exactly 300x169 and 330x186 (720p: 200x113, 220x124); the same pair serves All Apps' cells, which use the same sizes. ~0.45 MB per app ARGB; LEGACY may use RGB_565 for opaque gradients",
     "night_rim": "at night a 1 px inner rim, white 0.10 (lite: 1 px border white 0.14), so dark tiles (Netflix, YouTube, Claro tv+) keep their edge on the dark sky",
-    "reorder": "hold OK: scale 1.10 + lift 12 + wiggle 1.5 deg (v1 HomeView LIFT/WIGGLE), unchanged"
+    "reorder": "hold OK: scale 1.10 + lift 12 + wiggle 1.5 deg (v1 HomeView LIFT/WIGGLE), unchanged",
+    "card_203": {
+      "$note": "design/203-tiles-grandes.md: what card 203 ships before 204 (focus) and 206 (band). Where it differs from the notes above, this wins for 203.",
+      "interim_focus": { "scale": 1.10, "lift_y": 0, "glow": "white 0.08 -> 0 over the top half (v1 tileGlow 0x14FFFFFF)", "shadow_rest": { "offset_y": 4, "blur": 22, "alpha_day": 0.14, "alpha_night": 0.30 }, "shadow_focus": { "offset_y": 18, "blur": 40, "alpha_day": 0.34, "alpha_night": 0.60 }, "lite": "scale 1.10 at once + 3 px white inner ring, no shadow, no glow", "why": "v1's look (shadow + glow) at Nova's final scale: 1.20 on a 300 px tile would reach x=66 (outside even the 3.5% action-safe) and would make focus bitmaps 204 throws away" },
+      "art_cache": "only the logo is a bitmap (rest and focus sizes, exactly as drawn, no scaling at draw time); the gradient is a LinearGradient per app made at layout, the name is text: no full-tile bitmaps in 203",
+      "logo_max_px": { "rest": [216, 85], "focus": [238, 93] },
+      "neutral": ["#2A2A2E", "#161618"],
+      "neutral_note": "apps with no brand gradient (web/home.js face() default): Android apps with a logo but no TILE_STYLE, unknown apps, LG apps outside SHELF without a bgColor",
+      "word_fit": { "width": 0.80, "size_max": 40, "size_min": 24, "weight": 700, "font": "Inter, Ui.displayBold (opsz 32, wght 700)", "lines": 1, "overflow": "ellipsis at 24 px" },
+      "platter": "none in Nova (Classic keeps it)",
+      "rows_out": "tiles outside the 5-wide window fade with their slide (alpha = 1 - overflow / (tile + gap)); no clip line"
+    }
   },
 
   "elevation": {
@@ -368,7 +384,8 @@
     "tiles_art_10_apps_mb": 4.5,
     "app_art_logo_mb": 0.6,
     "pss_target_card": "<= +8 MB per card (card 201 rule); Nova total <= 130 MB on the TCL (owner decision 9)",
-    "web_layers": "will-change only on the focused tile and on what slides (row, drawer); never on every tile"
+    "web_layers": "will-change only on the focused tile and on what slides (row, drawer); never on every tile",
+    "card_203": { "logo_per_app_kb_max": 158, "apps_8_mb": 1.3, "apps_12_mb": 1.9, "today_8_apps_mb": 0.6, "delta_8_apps_mb": 0.7, "at_720p": "x 4/9 (8 apps ~0.6 MB)", "limit": "<= +8 MB PSS against 202 (card 201); designer target <= +5 MB", "note": "replaces tiles_art_per_app_mb for 203: the gradient is a shader, not a bitmap" }
   },
 
   "brand_nova": {
@@ -382,7 +399,12 @@
     "globoplay":     { "word": "#FFFFFF", "word_shadow": true },
     "spotify":       { "word": "#FFFFFF", "word_shadow": true, "color": "#1DB954", "tile": ["#1DB954", "#0F7A36"], "source": "web/home.js SHELF and HomeApps.SHELF color 1DB954; no Android TILE_STYLE today" },
     "clarotv":       { "word": "#E3262E" },
-    "discoveryplus": { "word": "#FFFFFF" }
+    "discoveryplus": { "word": "#FFFFFF" },
+    "hulu":          { "word": "#1D1D1F", "tile": ["#1CE783", "#0B8F4E"], "source": "web/home.js SHELF; white would be 2.5:1 mid-tile, the dark ink is 6.7:1" },
+    "paramount":     { "word": "#FFFFFF", "tile": ["#0064FF", "#002A86"], "source": "web/home.js SHELF" },
+    "peacock":       { "word": "#FFFFFF", "tile": ["#1C1C1E", "#000000"], "source": "web/home.js SHELF" },
+    "nfl":           { "word": "#FFFFFF", "tile": ["#013369", "#00163D"], "source": "web/home.js SHELF (web only)" },
+    "jellyfin":      { "word": "#FFFFFF", "word_shadow": true, "tile": ["#AA5CC3", "#00A4DC"], "source": "web/home.js SHELF (web only); 3.9:1 mid-tile" }
   },
 
   "contrast_checked": {

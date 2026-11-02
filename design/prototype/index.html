@@ -18,12 +18,22 @@
   <button id="bAlone" type="button">Perfis: 3 (U)</button>
   <button id="bStart" type="button">Ligar a TV (O)</button>
   <button id="bSpeed" type="button">Velocidade (V)</button>
+  <button id="b203" type="button">Recorte: Nova completa (3)</button>
+  <button id="bArt" type="button">Arte: logo (T)</button>
+  <button id="bGuide" type="button">Guias: não (G)</button>
   <span class="help">Setas movem · Enter = OK · Esc/Backspace = Voltar</span>
 </div>
 <div id="view">
   <div id="stage">
     <div id="sky" class="layer"><div class="s day"></div><div class="s night"></div><div class="lift"></div></div>
     <div id="home" class="layer">
+      <div id="today">
+        <div class="back"></div>
+        <div class="veil"></div>
+        <div class="title">Para você</div>
+        <div class="cards"></div>
+        <div class="big"><div class="time"></div><div class="date"></div></div>
+      </div>
       <div id="band">
         <div class="art" id="artA"></div>
         <div class="art" id="artB"></div>
@@ -58,6 +68,11 @@
     <div id="drawer" class="layer"></div>
     <div id="apps" class="layer sheet"><h2>Todos os Apps</h2><div class="grid"></div></div>
     <div id="profiles" class="layer sheet" role="dialog" aria-label="Quem está assistindo?"><h2>Quem está assistindo?</h2><div class="who-list"></div></div>
+    <div id="guides">
+      <div class="safe"></div>
+      <div class="gcol"></div><div class="gcol"></div><div class="gcol"></div><div class="gcol"></div><div class="gcol"></div>
+      <div class="glabel">fileira y 820–989 · tile 300×169, raio 28 · vão 57 · de x 96 a 1824 · caixa do logo 216×85 (medidas a 1080p)</div>
+    </div>
     <div id="toast"></div>
     <div id="sr" class="sr" aria-live="polite"></div>
   </div>

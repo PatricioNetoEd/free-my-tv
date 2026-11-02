@@ -2,7 +2,8 @@
  * Prototype of the "Nova" home screen (card 200), on a 1920 x 1080 stage scaled to the window.
  * Same limits as web/home.css, so it also proves the look fits old TVs: no CSS variables, grid or backdrop-filter, and
  * only transform and opacity animate (focus surfaces are separate elements whose opacity changes). Values come from
- * design/tokens-v2.json. Classes on #stage: night, drawer-open, sheet-open, flat, lite, no-key.
+ * design/tokens-v2.json. Classes on #stage: night, drawer-open, sheet-open, flat, lite, no-key; card 203's cut: c203,
+ * names, guides, no-picks (its rules are at the end, under "Card 203").
  * Font: Inter, the app's own file (app/assets/fonts/InterVariable.ttf; web/ has no copy, tools/webapp.py packs it into
  * the LG and Samsung builds as fonts/). Nothing from the network: where the browser refuses a file:// font from a
  * parent folder (Firefox), the fallback stack draws.
@@ -255,6 +256,8 @@ svg { display: block; }
   text-align: center; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden;
 }
 .face .word.shade { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
+.face .word { text-overflow: ellipsis; }
+.face .mark, .face .lbox, .face .glow { display: none; }
 .face .sheen {
   position: absolute; left: -10px; top: 0; right: -10px; bottom: 0; border-radius: 28px; opacity: 0;
   background: -webkit-linear-gradient(top, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 55%);
@@ -409,3 +412,123 @@ svg { display: block; }
 
 /* Read aloud only (the prototype's stand-in for TalkBack announcements). */
 .sr { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+/* MARK: - Card 203 (key 3, #card=203): only what 203 ships, over today's Nova (card 202). design/203-tiles-grandes.md */
+
+#today { display: none; }
+.c203 #today { display: block; }
+.c203 #band, .c203 #hero, .c203 #info, .c203 #me { display: none; }
+.drawer-open #today { opacity: 0; }
+#today { -webkit-transition: opacity 0.2s; transition: opacity 0.2s; }
+
+/* Today's sky: the light (or dark) gradient with the focused pick's colors under a veil (web/home.css #sky). */
+.c203 #sky .day { background: -webkit-linear-gradient(top, #F5F5F7, #E2E2E7); background: linear-gradient(#F5F5F7, #E2E2E7); }
+.c203 #sky .night { background: -webkit-linear-gradient(top, #1C1C1E, #0B0B0D); background: linear-gradient(#1C1C1E, #0B0B0D); }
+#today .back, #today .veil { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
+#today .veil { background: rgba(245, 245, 247, 0.74); }
+.night #today .veil { background: rgba(11, 11, 13, 0.78); }
+.no-picks #today .back { display: none; }
+
+/* "Para você" and the picks cards as the 202 Nova draws them (HomeLayout.NOVA, L_CARDS_TOP 262, L_CARD_H 442). */
+#today .title { position: absolute; left: 93px; top: 177px; font-size: 52px; font-weight: 600; line-height: 1; color: #1D1D1F; white-space: nowrap; }
+.night #today .title { color: #F5F5F7; }
+.no-key #today .title { display: none; }
+#today .cards { position: absolute; left: 0; top: 0; -webkit-transition: -webkit-transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1); transition: transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1); }
+.card { position: absolute; top: 262px; height: 442px; -webkit-transition: -webkit-transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.15); transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.15); }
+.card .img, .card .ring { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 18px; }
+.card .img { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14); }
+.night .card .img { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32); }
+.card .ring { box-shadow: inset 0 0 0 2.5px rgba(255, 255, 255, 0.85); opacity: 0; -webkit-transition: opacity 0.17s; transition: opacity 0.17s; }
+.card .name { position: absolute; left: 0; top: 464px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 31px; font-weight: 600; color: #1D1D1F; }
+.card .meta { position: absolute; left: 0; top: 506px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 25px; font-weight: 500; color: #6E6E73; opacity: 0; }
+.night .card .name { color: #F5F5F7; }
+.night .card .meta { color: rgba(245, 245, 247, 0.62); }
+.card.wide .meta { opacity: 1; }
+.card.focus { z-index: 2; -webkit-transform: translateY(-6px) scale(1.05); transform: translateY(-6px) scale(1.05); }
+.card.focus .ring { opacity: 1; }
+.lite .card .ring { border: 3px solid #FFF; box-sizing: border-box; }
+/* No TMDB key: the big clock and the date instead of the cards (web/home.css #clock in Nova). */
+#today .big { position: absolute; left: 92px; top: 300px; display: none; color: #1D1D1F; }
+.no-picks #today .big { display: block; }
+.night #today .big { color: #F5F5F7; }
+#today .time { font-size: 176px; font-weight: 200; line-height: 1; letter-spacing: -0.01em; -webkit-font-feature-settings: 'tnum'; font-feature-settings: 'tnum'; }
+#today .date { margin-top: 18px; font-size: 40px; font-weight: 500; color: #6E6E73; }
+.night #today .date { color: rgba(245, 245, 247, 0.62); }
+
+/* Top bar in the theme's ink (no photo behind it yet: that is 206); no cap on the selected tab, as today. */
+.c203 #topbar { color: #1D1D1F; }
+.c203.night #topbar { color: #F5F5F7; }
+.c203 .tab { color: #6E6E73; }
+.c203 .tab.on { color: #1D1D1F; }
+.c203.night .tab { color: rgba(245, 245, 247, 0.62); }
+.c203.night .tab.on { color: #F5F5F7; }
+.c203 .tab .cap { display: none; }
+.c203 .tab.focus, .c203.night .tab.focus { color: #1D1D1F; }
+.c203 .round { color: #1D1D1F; }
+.c203 .round .glass {
+  background: -webkit-linear-gradient(top, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.5));
+  background: linear-gradient(rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.5));
+  box-shadow: 0 6px 26px rgba(0, 0, 0, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+.c203.night .round { color: #FFF; }
+.c203.night .round .glass {
+  background: -webkit-linear-gradient(top, rgba(40, 40, 44, 0.8), rgba(17, 17, 19, 0.62));
+  background: linear-gradient(rgba(40, 40, 44, 0.8), rgba(17, 17, 19, 0.62));
+  box-shadow: 0 6px 26px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.c203 .round.focus, .c203.night .round.focus { color: #1D1D1F; }
+.c203 .round .tip { color: #1D1D1F; }
+.c203.night .round .tip { color: #F5F5F7; }
+.lite.c203 .round .glass { background: #FAFAFC; }
+.lite.c203.night .round .glass { background: #2A2A2D; }
+
+/* The tiles: 203's interim focus (today's look at Nova's final scale) until 204: scale 1.10 from the center, no lift,
+   no sheen or parallax; the deep shadow and a faint top glow. */
+.c203 .tile.focus { -webkit-transform: scale(1.1); transform: scale(1.1); }
+.c203 .face .sheen { display: none; }
+.c203 .tile .face { box-shadow: 0 4px 22px rgba(0, 0, 0, 0.14); }
+.c203.night .tile .face { box-shadow: 0 4px 22px rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+.c203 .tile .shadow { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34); }
+.c203.night .tile .shadow { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6); }
+.c203 .face .glow {
+  display: block; position: absolute; left: 0; top: 0; right: 0; height: 50%; opacity: 0;
+  background: -webkit-linear-gradient(top, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+  background: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+  -webkit-transition: opacity 0.17s; transition: opacity 0.17s;
+}
+.c203 .tile.focus .glow { opacity: 1; }
+.lite .face .glow { display: none !important; }
+.flat .face .glow { -webkit-transition: none; transition: none; }
+
+/* Art: a stand-in for the lifted logo (the name filling the 216 x 85 logo box); unknown apps and T ("só nome") show
+   the fallback name. */
+.c203 .face.has-mark .mark {
+  display: block; position: absolute; left: 42px; top: 50%; width: 216px; height: 85px; margin-top: -42px;
+  line-height: 85px; text-align: center; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden;
+}
+.c203 .face.has-mark .word { display: none; }
+.c203.names .face.has-mark .mark { display: none; }
+.c203.names .face.has-mark .word { display: block; }
+.lite .tile.focus .face .mark { margin-left: -3px; margin-top: -45px; }
+
+/* Chevrons: until the band (206) they sit at the tiles' middle, in the side margins (y=770 has the cards' text). */
+.c203 .chev { top: 892px; }
+.c203 .chev.l { left: 54px; }
+.c203 .chev.r { left: 1842px; }
+.c203 .chev { color: #7A7A80; }
+
+/* Guides (G): the 5% safe area, the 5 columns of the row and each tile's logo box. Not part of the TV screen. */
+#guides { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; z-index: 40; display: none; pointer-events: none; }
+.guides #guides { display: block; }
+#guides .safe { position: absolute; left: 96px; top: 60px; width: 1728px; height: 960px; border: 2px dashed #FF9F0A; box-sizing: border-box; }
+#guides .gcol { position: absolute; top: 820px; width: 300px; height: 169px; border: 1px solid rgba(255, 159, 10, 0.9); box-sizing: border-box; }
+#guides .gcol:nth-child(2) { left: 96px; }
+#guides .gcol:nth-child(3) { left: 453px; }
+#guides .gcol:nth-child(4) { left: 810px; }
+#guides .gcol:nth-child(5) { left: 1167px; }
+#guides .gcol:nth-child(6) { left: 1524px; }
+#guides .glabel { position: absolute; left: 96px; top: 992px; font-size: 24px; line-height: 28px; font-weight: 600; color: #FF9F0A; white-space: nowrap; }
+.drawer-open #guides .gcol, .sheet-open #guides .gcol { display: none; }
+.guides .face .lbox { display: block; position: absolute; left: 42px; top: 42px; width: 216px; height: 85px; border: 1px dashed rgba(255, 159, 10, 0.95); box-sizing: border-box; }
+.c203 #clock { color: #1D1D1F; }
+.c203.night #clock { color: #F5F5F7; }

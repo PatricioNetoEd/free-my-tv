@@ -397,6 +397,8 @@ O `lite` do protótipo é também o que o `Ui.LEGACY` mostra, só que o LEGACY m
   - **O:** simula ligar a TV (início completo): com 2 ou mais perfis abre a folha; só com o Principal, não.
   - **V:** a rede simulada para a velocidade: testada há 2 h → nunca testada → o teste falha (aos 4 s) → sem rede.
     OK no item roda o teste simulado: "Testando…" com a barra por 10 s e um resultado entre 180 e 260 Mbps.
+  - **3:** só o que o card 203 entrega (tiles grandes sobre a Nova de hoje; `#card=203`), com **T** (logo ou só nome)
+    e **G** (guias). Ver `design/203-tiles-grandes.md`, seção 9.
 - **Estados por endereço**, para capturas e para o validador. Exemplos:
   - `index.html#keys=rrrru`: foco no 5º app (Max), depois ↑ para a faixa.
   - `#night=1&perf=lite&key=0&apps=20&cont=0&hd=1&profile=1&speed=2&single=1&start=1&keys=…`; nas teclas, `l r u d`
