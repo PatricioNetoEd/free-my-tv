@@ -53,8 +53,20 @@ public class SettingsActivity extends Activity {
     private SettingsView view;
     private DreamView preview;   // "Screensaver": the screensaver right here, without changing the system setting
 
+    // Home pressed in here leaves this activity alive in its own task, behind the home screen, with its window: 24 to
+    // 60 MB of :home (#216). The home screen closes it once it's back in front (homeResumed), or this one does when it
+    // pauses with the home screen already resumed (HomeActivity resumes while the previous activity pauses).
+    // UI thread only: both live in :home.
+    private static java.lang.ref.WeakReference<SettingsActivity> alive;
+    /** The task of the home screen that is resumed, or -1. */
+    private static int homeTask = -1;
+    private boolean resumed;
+    /** A permission dialog of ours is up: its answer comes back here, so this screen stays. */
+    private boolean asking;
+
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        alive = new java.lang.ref.WeakReference<>(this);
         if (openFireHome(getIntent())) return;
         Watchdog.install(this);
         Updates.schedule(this);   // the week's update check, once (a fresh install has had no boot or update yet)
@@ -81,6 +93,8 @@ public class SettingsActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
+        resumed = true;
+        asking = false;
         if (view == null) return;
         view.resume();
         // From ADB: am start -n io.freemytv/.SettingsActivity --ez screensaver true (straight to the preview).
@@ -98,14 +112,54 @@ public class SettingsActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        resumed = false;
         closePreview();     // before pausing the view: closing the preview resumes it (view.resume)
         if (view != null) view.pause();
         super.onPause();
+        closeIfBehind();    // after view.pause: it may have just asked for Continue Watching's grant
     }
 
     @Override protected void onDestroy() {
         if (view != null) view.stopKeyPage();
+        if (alive != null && alive.get() == this) alive = null;
         super.onDestroy();
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        asking = false;
+    }
+
+    /** Android's permission dialog, for a row of Home Settings (Status icons, Continue Watching). */
+    void askPermission(String permission) {
+        asking = true;
+        requestPermissions(new String[] {permission}, 1);
+    }
+
+    /** The home screen came to the front (HomeActivity.onResume): settings left behind it in another task close. */
+    static void homeResumed(Activity home) {
+        homeTask = home.getTaskId();
+        SettingsActivity s = alive == null ? null : alive.get();
+        if (s != null) s.closeIfBehind();
+    }
+
+    static void homePaused(Activity home) {
+        if (homeTask == home.getTaskId()) homeTask = -1;
+    }
+
+    /**
+     * Closes this screen when the home screen is in front and this one sits behind it in another task (Home pressed
+     * here or in an app opened from here, as TV Settings). Never on Fire TV's shared task (Back and the app's icon stay
+     * as they were), while a switch is asked for or under way (its progress and the 10 s notice show here), while a
+     * permission dialog or Continue Watching's ADB grant is out (their answer comes back here), nor for a rotation.
+     * Kept once, it isn't tried again until the home screen comes back.
+     */
+    private void closeIfBehind() {
+        if (homeTask == -1 || resumed || isFinishing() || isDestroyed() || isChangingConfigurations()
+                || getTaskId() == homeTask || asking || view != null && view.mustStay()) {
+            return;
+        }
+        AppLog.w("settings: closed behind the home screen");
+        finish();
     }
 
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
@@ -480,6 +534,15 @@ public class SettingsActivity extends Activity {
             qrPaint.setFilterBitmap(false);
             qrSlot = new Paint(Paint.ANTI_ALIAS_FLAG);
             qrSlot.setColor(0x14FFFFFF);
+        }
+
+        /**
+         * Must stay alive behind the home screen (SettingsActivity.closeIfBehind): a switch asked for or under way (the
+         * state read again now), Continue Watching's ADB grant still out, or the phone's key page open.
+         */
+        boolean mustStay() {
+            state = HomeMode.state(getContext());
+            return busy() || watchGrantPending || keyPage != null;
         }
 
         private boolean busy() {
@@ -1301,7 +1364,7 @@ public class SettingsActivity extends Activity {
         private void requestBluetooth() {
             if (android.os.Build.VERSION.SDK_INT >= 31
                     && activity.checkSelfPermission("android.permission.BLUETOOTH_CONNECT") != PackageManager.PERMISSION_GRANTED) {
-                activity.requestPermissions(new String[] {"android.permission.BLUETOOTH_CONNECT"}, 1);
+                activity.askPermission("android.permission.BLUETOOTH_CONNECT");
             }
         }
 
@@ -1611,7 +1674,7 @@ public class SettingsActivity extends Activity {
         /** A new page and its code (a new port and token); the old one stops. */
         private void startKeyPage() {
             stopKeyPage();
-            InetAddress lan = KeyPage.lanAddress(getContext());
+            InetAddress lan = KeyPage.lanAddress(getContext().getApplicationContext());   // a manager made for the activity keeps it
             if (lan == null) {
                 setKeyStatus(Ui.tr("The TV isn't on a network: connect it, or type the key."), true);
             } else {
@@ -1988,7 +2051,7 @@ public class SettingsActivity extends Activity {
             if (!running) return;
             watchGrantPending = false;
             if (Prefs.topContent().equals(Prefs.TOP_CONTINUE) && !WatchNext.allowed(getContext())) {
-                activity.requestPermissions(new String[] {WatchNext.PERMISSION}, 1);
+                activity.askPermission(WatchNext.PERMISSION);
             }
         }
 
