@@ -244,6 +244,27 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** The tile size and look crispLogos were made for: a new shelf at the same size keeps the apps that stay. */
     private float crispW = -1, crispH = -1;
     private HomeLayout crispLay;
+    /**
+     * Nova's sized logos are made on LOADER (design/204 §7: 22 on the UI thread took 175 ms on a TCL). Bumped by each
+     * new batch and whenever the copies being made would no longer fit (a new row, look, size or profile, destroy): a
+     * batch made for an earlier one is recycled unseen. Read by LOADER to stop early.
+     */
+    private volatile int logoGen;
+
+    /** One sized copy for LOADER to make: the app's own bitmap, the size, which slot, and what came out. */
+    private static final class LogoJob {
+        final Bitmap src;
+        final int w, h;
+        final boolean rest;
+        Bitmap out;
+
+        LogoJob(Bitmap src, int w, int h, boolean rest) {
+            this.src = src;
+            this.w = w;
+            this.h = h;
+            this.rest = rest;
+        }
+    }
 
     // Profiles (card 214a): applied in place when the home screen shows again (no recreate, nothing fetched).
     /** Profiles.stamp as last seen, the profile shown and its starting tab. */
@@ -1943,7 +1964,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (k == 0 || rowWord == null || tileRects.length == 0) return;   // before the first layout
         float bh = tileRects[0].height(), maxW = tileRects[0].width() * 0.8f;
         long start = SystemClock.uptimeMillis();
-        int made = 0;
+        List<LogoJob> jobs = new ArrayList<>();
         for (HomeApps.Item it : shelf) {
             RowTile t = new RowTile();
             int[] style = TILE_STYLE.get(it.key);
@@ -1972,25 +1993,88 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
             t.shader = new LinearGradient(0, -bh / 2, 0, bh / 2, colors[0], colors[1], Shader.TileMode.CLAMP);
             rowTiles.put(it, t);
-            // Both sizes of the logo now, not at the first frame that shows it (review/203: a first pass along the
-            // row was slower, and native memory grew as it went).
-            if (t.word == null && it.logo != null) made += warmLogo(it, t.logoMode == 2 && it.logoDark != null);
+            // Both sizes of the logo before the first pass along the row (review/203: it was slower, and native
+            // memory grew as it went), but on LOADER (review/204): until a copy comes, drawLogo scales another.
+            if (t.word == null && it.logo != null) planLogo(jobs, it, t.logoMode == 2 && it.logoDark != null);
         }
-        if (made > 0) AppLog.w("home: row logos " + made + " in " + (SystemClock.uptimeMillis() - start) + " ms");
+        warmLogos(jobs, SystemClock.uptimeMillis() - start);
     }
 
-    /** The logo's resting and focused copies, made now if they aren't yet; returns how many were made. */
-    private int warmLogo(HomeApps.Item it, boolean dark) {
+    /** The logo's resting and focused copies this row lacks, added to `jobs` with their sizes (made on LOADER). */
+    private void planLogo(List<LogoJob> jobs, HomeApps.Item it, boolean dark) {
         Bitmap src = dark ? it.logoDark : it.logo;
-        if (src == null) return 0;
-        int made = 0;
-        for (int rest = 0; rest < 2; rest++) {
-            Bitmap[] sized = crispLogos.get(src);
-            if (sized != null && sized[rest == 1 ? 0 : 1] != null) continue;
-            crispLogo(it, dark, rest == 1);
-            made++;
+        if (src == null) return;
+        Bitmap[] sized = crispLogos.get(src);
+        float focused = logoScale(it, src), lw = src.getWidth(), lh = src.getHeight();
+        for (int r = 0; r < 2; r++) {
+            boolean rest = r == 0;
+            if (sized != null && sized[rest ? 0 : 1] != null) continue;
+            boolean planned = false;   // two shelf items with the same bitmap
+            for (LogoJob j : jobs) planned |= j.src == src && j.rest == rest;
+            if (planned) continue;
+            float scale = rest ? focused / (1 + lay.focusGrow) : focused;
+            jobs.add(new LogoJob(src, Math.round(lw * scale), Math.round(lh * scale), rest));
         }
-        return made;
+    }
+
+    /**
+     * Has LOADER make `jobs` and hands them to the UI thread in one go. A newer batch, look or size makes this one
+     * stale (logoGen): LOADER stops, and what it made is recycled unseen. Nothing escapes LOADER (:home's watchdog
+     * counts it as a crash). Logs the background work and the UI thread's share (planning and taking them).
+     */
+    private void warmLogos(List<LogoJob> jobs, final long planMs) {
+        final int gen = ++logoGen;   // what an earlier batch makes now is for a row that's gone
+        if (jobs.isEmpty()) return;
+        final LogoJob[] batch = jobs.toArray(new LogoJob[0]);
+        LOADER.execute(() -> {
+            long start = SystemClock.uptimeMillis();
+            int made = 0;
+            try {
+                for (LogoJob j : batch) {
+                    if (gen != logoGen) break;
+                    if (j.src.isRecycled()) continue;
+                    j.out = Ui.downscale(j.src, j.w, j.h);
+                    made++;
+                }
+            } catch (Throwable e) {   // an OutOfMemoryError too: what was made still goes, the rest stays scaled
+                AppLog.w("home: row logos stopped: " + e.getClass().getSimpleName());
+            }
+            final int count = made;
+            final long workMs = SystemClock.uptimeMillis() - start;
+            try {
+                handler.post(() -> takeLogos(gen, batch, count, workMs, planMs));
+            } catch (Throwable ignored) {   // nothing escapes LOADER
+            }
+        });
+    }
+
+    /** UI thread: LOADER's copies go in crispLogos, or are recycled when stale (they were never drawn). */
+    private void takeLogos(int gen, LogoJob[] batch, int made, long workMs, long planMs) {
+        long start = SystemClock.uptimeMillis();
+        boolean stale = destroyed || gen != logoGen;
+        int taken = 0;
+        for (LogoJob j : batch) {
+            Bitmap out = j.out;
+            j.out = null;
+            if (out == null) continue;
+            Bitmap[] sized = stale ? null : crispLogos.get(j.src);
+            int slot = j.rest ? 0 : 1;
+            if (stale || sized != null && sized[slot] != null) {
+                if (out != j.src) out.recycle();   // made by this batch, in no map, never drawn
+                continue;
+            }
+            if (sized == null) crispLogos.put(j.src, sized = new Bitmap[2]);
+            sized[slot] = out;
+            if (out != j.src) crispMade.add(out);
+            taken++;
+        }
+        if (stale) return;
+        if (taken > 0) {
+            tilesDirty = true;
+            tiles.invalidate();
+        }
+        AppLog.w("home: row logos " + made + " in " + workMs + " ms on LOADER, "
+                + (planMs + SystemClock.uptimeMillis() - start) + " ms on the UI thread");
     }
 
     /**
@@ -1999,6 +2083,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * (HomeApps keeps it for every screen): only the copies made here are freed. Returns how many.
      */
     private int releaseLogos() {
+        logoGen++;   // a batch on its way was made for these sizes
         int n = crispMade.size();
         for (Bitmap b : crispMade) b.recycle();
         crispMade.clear();
@@ -2030,6 +2115,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (java.util.Iterator<Map.Entry<Bitmap, Bitmap[]>> i = crispLogos.entrySet().iterator(); i.hasNext(); ) {
             Map.Entry<Bitmap, Bitmap[]> e = i.next();
             if (keep.contains(e.getKey())) continue;
+            logoGen++;   // a batch on its way may hold this app's copies (makeRowTiles plans what's still missing)
             for (Bitmap b : e.getValue()) {
                 if (b != null && crispMade.remove(b)) b.recycle();
             }
@@ -2518,13 +2604,40 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawLogo(Canvas c, HomeApps.Item it, RectF box, float s, int mode) {
         float grow = lay.focusGrow;
-        boolean rest = s < 1 + grow / 2;
-        Bitmap logo = crispLogo(it, mode == 2 && it.logoDark != null, rest);
-        if (logo == null) return;
-        float scale = rest ? s : s / (1 + grow);
+        boolean rest = s < 1 + grow / 2, dark = mode == 2 && it.logoDark != null, crisp = true;
+        Bitmap logo;
+        float scale;
+        if (lay.nova) {
+            // Nova never sizes a logo here (LOADER does, makeRowTiles): until its copy comes, the other copy, or the
+            // app's own logo, is scaled to the same size.
+            Bitmap src = dark ? it.logoDark : it.logo;
+            if (src == null) return;
+            Bitmap[] sized = crispLogos.get(src);
+            Bitmap ready = sized == null ? null : sized[rest ? 0 : 1];
+            if (ready != null) {
+                logo = ready;
+                scale = rest ? s : s / (1 + grow);
+            } else if (sized != null && sized[0] != null) {
+                logo = sized[0];
+                scale = s;
+                crisp = false;
+            } else if (sized != null && sized[1] != null) {
+                logo = sized[1];
+                scale = s / (1 + grow);
+                crisp = false;
+            } else {
+                logo = src;
+                scale = tileRects.length == 0 ? s : logoScale(it, src) / (1 + grow) * s;
+                crisp = false;
+            }
+        } else {
+            logo = crispLogo(it, dark, rest);
+            if (logo == null) return;
+            scale = rest ? s : s / (1 + grow);
+        }
         float dw = logo.getWidth() * scale, dh = logo.getHeight() * scale;
         float left = box.centerX() - dw / 2, top = box.centerY() - dh / 2;
-        if (rest ? Math.abs(scale - 1) < 0.002f : scale > 0.998f) {
+        if (crisp && (rest ? Math.abs(scale - 1) < 0.002f : scale > 0.998f)) {
             left = Math.round(left);
             top = Math.round(top);
         }
@@ -2543,17 +2656,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Bitmap[] sized = crispLogos.get(src);
         Bitmap cached = sized == null ? null : sized[rest ? 0 : 1];
         if (cached != null) return cached;
-        float grow = lay.focusGrow;
-        float bw = tileRects[0].width() * (1 + grow), bh = tileRects[0].height() * (1 + grow);
-        float lw = src.getWidth(), lh = src.getHeight();
-        float scale = (float) Math.sqrt(bw * bh * lay.logoInk / (lw * lh * Math.max(0.08f, it.logoInk))) * it.logoScale;
-        scale = Math.min(scale, Math.min(bw * lay.logoMaxW / lw, bh * lay.logoMaxH / lh));
+        float grow = lay.focusGrow, lw = src.getWidth(), lh = src.getHeight();
+        float scale = logoScale(it, src);
         if (rest) scale /= 1 + grow;
         Bitmap out = Ui.downscale(src, Math.round(lw * scale), Math.round(lh * scale));
         if (sized == null) crispLogos.put(src, sized = new Bitmap[2]);
         sized[rest ? 0 : 1] = out;
         if (out != src) crispMade.add(out);
         return out;
+    }
+
+    /** The logo's scale on the focused tile: the same ink for every app, within logoMaxW × logoMaxH. No allocation. */
+    private float logoScale(HomeApps.Item it, Bitmap src) {
+        float grow = lay.focusGrow;
+        float bw = tileRects[0].width() * (1 + grow), bh = tileRects[0].height() * (1 + grow);
+        float lw = src.getWidth(), lh = src.getHeight();
+        float scale = (float) Math.sqrt(bw * bh * lay.logoInk / (lw * lh * Math.max(0.08f, it.logoInk))) * it.logoScale;
+        return Math.min(scale, Math.min(bw * lay.logoMaxW / lw, bh * lay.logoMaxH / lh));
     }
 
     // MARK: - Bottom drawer
