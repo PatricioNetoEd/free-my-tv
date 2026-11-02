@@ -233,7 +233,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private List<HomeApps.Item> shelf = new ArrayList<>();
     private Spring[] tileFocus = new Spring[0];
     private RectF[] tileRects = new RectF[0];
-    private final Map<String, Bitmap> crispLogos = new HashMap<>();   // logos already sized for the focused tile
+    /**
+     * Logos already sized for this layout's tiles, by the app's own bitmap (its logo or dark logo): {rest, focused}. By
+     * identity, so finding one while drawing allocates nothing.
+     */
+    private final Map<Bitmap, Bitmap[]> crispLogos = new java.util.IdentityHashMap<>();
     /** The ones of those made here (Ui.downscale's copies), not the app's own logo when it was already the size. */
     private final Set<Bitmap> crispMade = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     /** Each app's tile like its Apple TV icon: brand colors (top, bottom) and logo (0 = as is, 1 = white, 2 = dark). */
@@ -249,6 +253,42 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         TILE_STYLE.put("clarotv", new int[] {0xFF1C1C1C, 0xFF0B0B0B, 0});
         TILE_STYLE.put("discoveryplus", new int[] {0xFF211E2A, 0xFF09080D, 0});
     }
+    // Nova (card 203): every tile is a gradient with the logo, or the app's name when there is no logo.
+    /** Apps without a brand of their own here (and logos in their brand's color, which would vanish on it). */
+    private static final int[] NEUTRAL_TILE = {0xFF2A2A2E, 0xFF161618, 0};
+    /** Brand gradients for the name alone (design/tokens-v2.json brand_nova): their logos keep the neutral one. */
+    private static final Map<String, int[]> NAME_TILE = new HashMap<>();
+    /** The name's color on its tile (white when not here), and the light gradients that give it a shadow. */
+    private static final Map<String, Integer> NAME_INK = new HashMap<>();
+    private static final Set<String> NAME_SHADE = new java.util.HashSet<>(java.util.Arrays.asList("prime", "globoplay", "spotify"));
+    static {
+        NAME_TILE.put("hulu", new int[] {0xFF1CE783, 0xFF0B8F4E, 0});
+        NAME_TILE.put("paramount", new int[] {0xFF0064FF, 0xFF002A86, 0});
+        NAME_TILE.put("peacock", new int[] {0xFF1C1C1E, 0xFF000000, 0});
+        NAME_TILE.put("spotify", new int[] {0xFF1DB954, 0xFF0F7A36, 0});
+        NAME_INK.put("netflix", 0xFFE50914);
+        NAME_INK.put("appletv", 0xFFB8BCC6);
+        NAME_INK.put("clarotv", 0xFFE3262E);
+        NAME_INK.put("hulu", 0xFF1D1D1F);   // white is 2.5:1 on Hulu's green, this 6.7:1
+    }
+
+    /** One Nova tile, made when the shelf is laid out (never while drawing): its gradient and its logo or its name. */
+    private static final class RowTile {
+        LinearGradient shader;
+        int logoMode;
+        String word;           // null: the logo
+        float wordSize, wordDy;
+        int wordInk;
+        boolean wordShade;
+    }
+
+    /** By shelf item (by identity: a reload makes new items, and setShelf makes these again). */
+    private final Map<HomeApps.Item, RowTile> rowTiles = new java.util.IdentityHashMap<>();
+    private LinearGradient rowGlow;
+    private final Paint rowRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private Paint rowWord, rowWordShade;
+    /** How much of a Nova tile shows while the row slides (tiles past the five fade instead of being cut). */
+    private float rowAlpha = 1;
     private final android.graphics.PorterDuffColorFilter whiteLogo =
             new android.graphics.PorterDuffColorFilter(0xFFFFFFFF, android.graphics.PorterDuff.Mode.SRC_IN);
     private final RectF platterRect = new RectF();
@@ -953,6 +993,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Symbols.warm(getContext(), "bell", 26 * k);
         Symbols.warm(getContext(), "bedtime", lay.text(21) * k);   // the sleep timer's "Off in", at lQuote's size
         layoutShelf();
+        // Nova has no glass under the apps: its layer would only hold an empty image on the GPU.
+        int platterLayer = lay.platter && !Ui.LEGACY ? LAYER_TYPE_HARDWARE : LAYER_TYPE_NONE;
+        if (platter.getLayerType() != platterLayer) platter.setLayerType(platterLayer, null);
         layoutStatus();
         layoutDrawer();
         layoutLight();
@@ -989,6 +1032,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         lClock = Ui.numbers(Ui.light, lay.text(200) * k, L_INK);
         lClock.setLetterSpacing(-0.01f);
         barClock = lay.nova ? Ui.numbers(Ui.semibold, lay.barClockSize * k, L_INK) : null;
+        // Nova's app names on their tiles (sized per name in layoutRow): Inter 700, and a soft shadow on light gradients.
+        rowWord = Ui.text(Ui.displayBold, 40 * k, WHITE);
+        rowWord.setTextAlign(Paint.Align.CENTER);
+        rowWordShade = new Paint(rowWord);
+        rowWordShade.setShadowLayer(2 * k, 0, 1 * k, 0x59000000);
         lWeather = Ui.text(Ui.medium, lay.text(34) * k, L_DIM);
         lClockQuote = Ui.numbers(Ui.medium, lay.text(28) * k, L_DIM);
         lightGradient = tintShade = null;
@@ -1670,11 +1718,23 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             retarget(true);
             layoutShelf();
         }
+        if (lay.nova) makeRowTiles();   // new items (a reload), even with the same apps
         tilesDirty = true;
         platter.invalidate();
     }
 
+    /** Apps the shelf shows at once: Nova's five, or HomeApps' count (it scrolls for the rest). */
+    private int shelfWindow() {
+        return lay.nova ? Math.min(lay.rowVisible, shelfVisible) : shelfVisible;
+    }
+
     private void layoutShelf() {
+        if (lay.nova) {
+            layoutRow();
+            return;
+        }
+        rowTiles.clear();   // Nova's, after a look change
+        rowGlow = null;
         int n = Math.min(shelf.size(), shelfVisible);
         float pad = SHELF_PAD * k, gap = TILE_GAP * k;
         float full = (lay.contentR - lay.margin - 2 * lay.shelfInset) * k;
@@ -1697,6 +1757,73 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     /**
+     * Nova's row (design/203): five tiles from the margin, at the row's final height, without glass. Each measure is the
+     * 1080p one times k, rounded, so a 720p UI gets 200 × 113 tiles at 64, 302, 540… (not 1080p's shrunk).
+     */
+    private void layoutRow() {
+        int n = Math.min(shelf.size(), shelfWindow());
+        float th = Math.round(lay.rowTileH * k), top = Math.round(lay.rowTop * k);
+        // The focused app stays in the window (a look change keeps the focus where it was).
+        shelfFirst = Math.max(0, Math.min(Math.max(shelfFirst, shelfIndex - n + 1), Math.min(shelfIndex, shelf.size() - n)));
+        placeRow();
+        platterRect.set(Math.round(lay.margin * k), top, Math.round(lay.contentR * k), top + th);
+        rowGlow = new LinearGradient(0, -th / 2, 0, 0, 0x14FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
+        rowRim.setStyle(Paint.Style.STROKE);
+        rowRim.setStrokeWidth(1);
+        Symbols.warm(getContext(), "chevron_right", lay.chevron * k);
+        releaseLogos();
+        makeRowTiles();
+    }
+
+    /** Nova: each tile's place for the current window (shelfFirst). */
+    private void placeRow() {
+        float tw = Math.round(lay.rowTile * k), th = Math.round(lay.rowTileH * k), top = Math.round(lay.rowTop * k);
+        for (int i = 0; i < shelf.size() && i < tileRects.length; i++) {
+            float x = Math.round((lay.margin + (i - shelfFirst) * (lay.rowTile + lay.rowGap)) * k);
+            tileRects[i].set(x, top, x + tw, top + th);
+        }
+    }
+
+    /**
+     * Nova: each app's gradient, and its name sized to fit when it has no logo (40 down to 24, then cut). Made at layout
+     * and when the shelf's items change, never while drawing.
+     */
+    private void makeRowTiles() {
+        rowTiles.clear();
+        if (k == 0 || rowWord == null || tileRects.length == 0) return;   // before the first layout
+        float bh = tileRects[0].height(), maxW = tileRects[0].width() * 0.8f;
+        for (HomeApps.Item it : shelf) {
+            RowTile t = new RowTile();
+            int[] style = TILE_STYLE.get(it.key);
+            int[] colors;
+            if (it.logo != null) {
+                // A logo without a gradient of its brand is in the brand's own color: on its brand it would vanish.
+                colors = style != null ? style : NEUTRAL_TILE;
+                t.logoMode = colors[2];
+            } else {
+                int[] named = NAME_TILE.get(it.key);
+                colors = style != null ? style : named != null ? named : NEUTRAL_TILE;
+                Integer ink = NAME_INK.get(it.key);
+                t.wordInk = ink != null ? ink : 0xFFFFFFFF;
+                t.wordShade = NAME_SHADE.contains(it.key);
+                String name = it.label != null ? it.label : "";
+                fitPaint.set(rowWord);
+                float size = 40;
+                for (; size > 24; size--) {
+                    fitPaint.setTextSize(size * k);
+                    if (fitPaint.measureText(name) <= maxW) break;
+                }
+                fitPaint.setTextSize(size * k);
+                t.word = TextUtils.ellipsize(name, fitPaint, maxW, TextUtils.TruncateAt.END).toString();
+                t.wordSize = size * k;
+                t.wordDy = Ui.halfCap(fitPaint);
+            }
+            t.shader = new LinearGradient(0, -bh / 2, 0, bh / 2, colors[0], colors[1], Shader.TileMode.CLAMP);
+            rowTiles.put(it, t);
+        }
+    }
+
+    /**
      * The logos sized for the previous tiles go now, not at the next GC (on Android 8+ their pixels are native memory,
      * and a look change or a new shelf would otherwise hold both sets). A logo already at its size is the app's own
      * (HomeApps keeps it for every screen): only the copies made here are freed. Returns how many.
@@ -1711,9 +1838,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Scrolls the shelf, one app at a time, so the focused app is shown: the tiles slide there (unless `snap`). */
     private void revealShelf(boolean snap) {
-        int n = Math.min(shelf.size(), shelfVisible);
+        int n = Math.min(shelf.size(), shelfWindow());
         int first = Math.max(0, Math.min(Math.max(shelfFirst, shelfIndex - n + 1), Math.min(shelfIndex, shelf.size() - n)));
         if (first == shelfFirst || tileRects.length == 0) return;
+        if (lay.nova) {
+            // Each tile moves from where it was to its new place, as on Classic (the step is rounded the same way).
+            for (int i = 0; i < tileRects.length && i < tileSlide.length; i++) if (!snap) tileSlide[i].value += tileRects[i].left;
+            shelfFirst = first;
+            placeRow();
+            for (int i = 0; i < tileRects.length && i < tileSlide.length; i++) if (!snap) tileSlide[i].value -= tileRects[i].left;
+            tilesDirty = true;
+            if (snap) return;
+            reorderAnim = true;
+            wake();
+            return;
+        }
         float dx = (shelfFirst - first) * (tileRects[0].width() + TILE_GAP * k);
         for (int i = 0; i < tileRects.length; i++) {
             tileRects[i].offset(dx, 0);
@@ -1728,7 +1867,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Shelf layer: the glass bar and its shadow (it only changes with the background). */
     private void drawPlatter(Canvas c) {
-        if (shelf.isEmpty()) return;
+        if (shelf.isEmpty() || !lay.platter) return;   // Nova: the tiles sit on the sky
         float radius = (TILE_RADIUS + SHELF_PAD) * k;
         tmp.set(platterRect);
         tmp.offset(0, 18 * k);
@@ -1894,6 +2033,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void drawTiles(Canvas c) {
+        if (lay.nova) {
+            drawRow(c);
+            return;
+        }
         // The focused one last: it grows over its neighbors without being covered by them.
         int top = -1;
         float most = 0.02f;
@@ -1944,6 +2087,106 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             Symbols.draw(getContext(), c, "chevron_right", platterRect.left + inset, cy, size, ink);
             c.restore();
         }
+    }
+
+    /**
+     * Nova's row (design/203): no glass, so nothing to clip against. A tile leaving the five fades as it slides
+     * (alpha = 1 - how far past the window / one step), and arrows at the screen's sides say there are more.
+     */
+    private void drawRow(Canvas c) {
+        int top = -1;
+        float most = 0.02f;
+        for (int i = 0; i < shelf.size(); i++) {
+            if (tileFocus[i].value > most) {
+                most = tileFocus[i].value;
+                top = i;
+            }
+        }
+        if (!reorderTop && liftIndex >= 0 && liftIndex < shelf.size() && moveLift.value > 0.02f) top = liftIndex;
+        float winL = platterRect.left, winR = platterRect.right, step = (lay.rowTile + lay.rowGap) * k;
+        for (int pass = 0; pass < 2; pass++) {
+            for (int i = 0; i < shelf.size(); i++) {
+                if ((pass == 0) == (i == top)) continue;
+                float dx = i < tileSlide.length ? tileSlide[i].value : 0;
+                float over = Math.max(winL - (tileRects[i].left + dx), tileRects[i].right + dx - winR);
+                float alpha = over <= 1 ? 1 : 1 - over / step;
+                if (alpha <= 0.01f) continue;
+                rowAlpha = alpha;
+                float angle = !reorderTop && i == liftIndex ? wiggle * moveLift.value : 0;
+                if (dx == 0 && angle == 0) {
+                    drawRowTile(c, i);
+                    continue;
+                }
+                c.save();
+                c.translate(dx, 0);
+                c.rotate(angle, tileRects[i].centerX(), tileRects[i].centerY());
+                drawRowTile(c, i);
+                c.restore();
+            }
+        }
+        rowAlpha = 1;
+        int last = Math.min(shelf.size(), shelfFirst + shelfWindow());
+        float cy = lay.chevronCy * k, size = lay.chevron * k, cx = lay.chevronCx * k;
+        int ink = 0xFF7A7A80;   // 3.3:1 on today's light sky, 4.6:1 at night
+        if (last < shelf.size()) Symbols.draw(getContext(), c, "chevron_right", w - cx, cy, size, ink);
+        if (shelfFirst > 0) {
+            c.save();
+            c.scale(-1, 1, cx, cy);
+            Symbols.draw(getContext(), c, "chevron_right", cx, cy, size, ink);
+            c.restore();
+        }
+    }
+
+    /**
+     * A Nova tile: the gradient edge to edge with the logo, or the app's name. Focus is today's (shadow and glow) at
+     * Nova's 1.10 until card 204; at night a 1 px rim keeps dark tiles apart from the dark sky.
+     */
+    private void drawRowTile(Canvas c, int i) {
+        HomeApps.Item it = shelf.get(i);
+        RowTile t = rowTiles.get(it);
+        if (t == null) return;
+        float l = !reorderTop && i == liftIndex ? Math.max(0, moveLift.value) : 0;
+        float f = tileFocus[i].value, fc = Ui.clamp(f), s = 1 + lay.focusGrow * f + LIFT_GROW * l;
+        RectF base = tileRects[i];
+        float bw = base.width(), bh = base.height(), r0 = lay.tileRadius * k;
+        float cx = base.centerX(), cy = base.centerY();
+        cell.set(cx - bw * s / 2, cy - bh * s / 2, cx + bw * s / 2, cy + bh * s / 2);
+        c.save();
+        c.translate(cx, cy);
+        c.scale(s, s);
+        tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
+        tmp.offset(0, (4 + 14 * f + 6 * l) * k);
+        shadowDeep.setColor(Ui.alpha(0xFF000000, (tone(0.14f, 0.3f) + tone(0.18f, 0.3f) * fc + 0.14f * Ui.clamp(l)) * rowAlpha));
+        shadows.draw(c, tmp, r0, DEEP_BLUR * k, shadowDeep);
+        tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
+        int alpha = Math.round(255 * rowAlpha);
+        tileFill.setShader(t.shader);
+        tileFill.setAlpha(alpha);
+        c.drawRoundRect(tmp, r0, r0, tileFill);
+        if (fc > 0.01f && rowGlow != null) {
+            tileFill.setShader(rowGlow);
+            tileFill.setAlpha(Math.round(255 * fc * rowAlpha));
+            c.drawRoundRect(tmp, r0, r0, tileFill);
+        }
+        tileFill.setShader(null);
+        tileFill.setAlpha(255);
+        float night = dark();
+        if (night > 0.01f) {
+            // 1 px on screen at any scale, just inside the edge.
+            float px = 1 / s;
+            rowRim.setStrokeWidth(px);
+            rowRim.setColor(Ui.alpha(0xFFFFFFFF, 0.1f * night * rowAlpha));
+            tmp.inset(px / 2, px / 2);
+            c.drawRoundRect(tmp, r0 - px / 2, r0 - px / 2, rowRim);
+        }
+        if (t.word != null) {
+            Paint p = t.wordShade ? rowWordShade : rowWord;
+            p.setTextSize(t.wordSize);
+            p.setColor(Ui.alpha(t.wordInk, rowAlpha));
+            c.drawText(t.word, 0, t.wordDy, p);
+        }
+        c.restore();
+        if (t.word == null && it.logo != null) drawLogo(c, it, cell, s, t.logoMode);
     }
 
     /**
@@ -2048,10 +2291,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * rest it is drawn pixel for pixel, without resampling (on a 720p UI, shrinking at draw time made it look jagged).
      */
     private void drawLogo(Canvas c, HomeApps.Item it, RectF box, float s, int mode) {
-        boolean rest = s < 1 + FOCUS_GROW / 2;
+        float grow = lay.focusGrow;
+        boolean rest = s < 1 + grow / 2;
         Bitmap logo = crispLogo(it, mode == 2 && it.logoDark != null, rest);
         if (logo == null) return;
-        float scale = rest ? s : s / (1 + FOCUS_GROW);
+        float scale = rest ? s : s / (1 + grow);
         float dw = logo.getWidth() * scale, dh = logo.getHeight() * scale;
         float left = box.centerX() - dw / 2, top = box.centerY() - dh / 2;
         if (rest ? Math.abs(scale - 1) < 0.002f : scale > 0.998f) {
@@ -2060,23 +2304,28 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         tmp.set(left, top, left + dw, top + dh);
         bitmapPaint.setColorFilter(mode == 1 ? whiteLogo : null);
+        if (rowAlpha < 1) bitmapPaint.setAlpha(Math.round(255 * rowAlpha));
         c.drawBitmap(logo, null, tmp, bitmapPaint);
         bitmapPaint.setColorFilter(null);
+        bitmapPaint.setAlpha(255);
     }
 
     private Bitmap crispLogo(HomeApps.Item it, boolean dark, boolean rest) {
         Bitmap src = dark ? it.logoDark : it.logo;
-        if (tileRects.length == 0) return src;
-        String key = it.key + "@" + System.identityHashCode(src) + "@" + Math.round(tileRects[0].width()) + (rest ? "@rest" : "");
-        Bitmap cached = crispLogos.get(key);
+        if (tileRects.length == 0 || src == null) return src;
+        // Every tile has the same size, and releaseLogos empties this at each layout: the app's bitmap is the key.
+        Bitmap[] sized = crispLogos.get(src);
+        Bitmap cached = sized == null ? null : sized[rest ? 0 : 1];
         if (cached != null) return cached;
-        float bw = tileRects[0].width() * (1 + FOCUS_GROW), bh = tileRects[0].height() * (1 + FOCUS_GROW);
+        float grow = lay.focusGrow;
+        float bw = tileRects[0].width() * (1 + grow), bh = tileRects[0].height() * (1 + grow);
         float lw = src.getWidth(), lh = src.getHeight();
-        float scale = (float) Math.sqrt(bw * bh * 0.085f / (lw * lh * Math.max(0.08f, it.logoInk))) * it.logoScale;
-        scale = Math.min(scale, Math.min(bw * 0.76f / lw, bh * 0.58f / lh));
-        if (rest) scale /= 1 + FOCUS_GROW;
+        float scale = (float) Math.sqrt(bw * bh * lay.logoInk / (lw * lh * Math.max(0.08f, it.logoInk))) * it.logoScale;
+        scale = Math.min(scale, Math.min(bw * lay.logoMaxW / lw, bh * lay.logoMaxH / lh));
+        if (rest) scale /= 1 + grow;
         Bitmap out = Ui.downscale(src, Math.round(lw * scale), Math.round(lh * scale));
-        crispLogos.put(key, out);
+        if (sized == null) crispLogos.put(src, sized = new Bitmap[2]);
+        sized[rest ? 0 : 1] = out;
         if (out != src) crispMade.add(out);
         return out;
     }
@@ -3048,7 +3297,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      * screen's edge, and a pointer resting there would scroll the shelf one app at a time to its end.
      */
     private int tileAt(float x, float y) {
-        int last = Math.min(tileRects.length, shelfFirst + Math.min(shelf.size(), shelfVisible));
+        int last = Math.min(tileRects.length, shelfFirst + Math.min(shelf.size(), shelfWindow()));
         for (int i = shelfFirst; i < last; i++) if (tileRects[i].contains(x, y)) return i;
         return -1;
     }
@@ -3753,7 +4002,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         for (int i = picksMode() ? 0 : 3; i < 3 + lightButtons.size(); i++) out.add(a11yId(Z_TOP, i));
         for (int i = 0; i < Math.min(Recs.MAX_CARDS, cards.size()); i++) out.add(a11yId(Z_CARDS, i));
         if (continueMode()) for (int i = 0; i < watching.size(); i++) out.add(a11yId(Z_WATCH, i));
-        for (int i = shelfFirst; i < Math.min(shelf.size(), shelfFirst + shelfVisible); i++) out.add(a11yId(Z_SHELF, i));
+        for (int i = shelfFirst; i < Math.min(shelf.size(), shelfFirst + shelfWindow()); i++) out.add(a11yId(Z_SHELF, i));
         for (int i = 0; i < drawerItems.size(); i++) out.add(a11yId(Z_DRAWER, i));
         if (drawerOpen && Prefs.weather()) out.add(a11yId(WIDGETS, 0));
         if (drawerOpen && Prefs.quotes() && HomeData.active().length > 0) out.add(a11yId(WIDGETS, 1));

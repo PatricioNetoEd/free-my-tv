@@ -27,6 +27,17 @@ final class HomeLayout {
     final float shelfInset;
     /** The smallest text on the home screen (0: as each paint says). */
     final float minText;
+    /**
+     * The shelf (card 203). Classic: tiles sized to fit the glass, centred (rowTile 0). Nova: no glass, rowVisible
+     * tiles of rowTile × rowTileH, rowGap apart, from the margin at rowTop; arrows for "more" at the screen's sides.
+     */
+    final boolean platter;
+    final int rowVisible;
+    final float rowTop, rowTile, rowTileH, rowGap, tileRadius, focusGrow;
+    /** The logo on a tile: its share of the focused tile's area (as ink), and never more than this share of its sides. */
+    final float logoInk, logoMaxW, logoMaxH;
+    /** Nova's "more" arrows: size, centres from the screen's left (the right one mirrored) and centre line. */
+    final float chevron, chevronCx, chevronCy;
 
     private HomeLayout(boolean nova) {
         this.nova = nova;
@@ -52,6 +63,16 @@ final class HomeLayout {
             quoteRowCy = tabTop + tabH / 2;
             shelfInset = 0;
             minText = 0;
+            platter = true;
+            rowVisible = 0;    // HomeApps.shelfVisible
+            rowTop = rowTile = rowTileH = 0;
+            rowGap = 48;       // HomeView.TILE_GAP
+            tileRadius = 22;
+            focusGrow = 0.2f;
+            logoInk = 0.085f;
+            logoMaxW = 0.76f;
+            logoMaxH = 0.58f;
+            chevron = chevronCx = chevronCy = 0;
         } else {
             margin = 96;
             contentR = 1824;
@@ -75,6 +96,22 @@ final class HomeLayout {
             quoteRowCy = 203;   // the title's line, at its cap's middle
             shelfInset = 40;    // HomeView.SHELF_PAD
             minText = 24;
+            // design/203: five 300 × 169 tiles span the safe width (5 × 300 + 4 × 57 = 1728), at the row's final height
+            // (the band of card 206 goes above it). Focused 1.10 (330 × 186): the interim focus until card 204.
+            platter = false;
+            rowVisible = 5;
+            rowTop = 820;
+            rowTile = 300;
+            rowTileH = 169;
+            rowGap = 57;
+            tileRadius = 28;
+            focusGrow = 0.1f;
+            logoInk = 0.14f;
+            logoMaxW = 0.72f;
+            logoMaxH = 0.5f;
+            chevron = 24;
+            chevronCx = 66;    // 54 to 78; the right one 1842 to 1866
+            chevronCy = 904;   // the tiles' middle until card 206 moves them over the row
         }
     }
 
