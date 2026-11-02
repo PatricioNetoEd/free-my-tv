@@ -168,6 +168,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final int[] neutralGlassPx = new int[Backdrop.GW * Backdrop.GH], neutralFrostPx = new int[Backdrop.FW * Backdrop.FH];
     private boolean nightPair;          // the glass holds both photos (day and night), blended by `night`
     private Shader nightGradient;
+    private int gradientH = -1;
 
     // At the top: tabs (0 to 2) and icon-only buttons (3 to 5); the three cards
     private int tab, topIndex, cardIndex;
@@ -304,8 +305,27 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** By shelf item (by identity: a reload makes new items, and setShelf makes these again). */
     private final Map<HomeApps.Item, RowTile> rowTiles = new java.util.IdentityHashMap<>();
-    private LinearGradient rowGlow;
     private final Paint rowRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+    // Nova's focus (card 204, design/204), all made at layout: the resting and the focus shadow (Shadows' cached masks
+    // on Ui.LEGACY, where these paints get no BlurMaskFilter), the diagonal sheen and the focus rim.
+    private final Paint rowRestShadow = new Paint(Paint.ANTI_ALIAS_FLAG), rowFocusShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint rowSheenPaint = new Paint(Paint.ANTI_ALIAS_FLAG), rowFocusRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private LinearGradient rowSheen;
+    /** The row's measures at this k, rounded as design/204 asks (720p: radius 19, lift 4, shadows 4/17, parallax 5/3). */
+    private float rowRadius, rowLift, rowRestY, rowFocusY, rowRestBlur, rowFocusBlur, rowRimW, rowSheenPx, rowShadowPx;
+    /**
+     * The parallax: one spring for the whole row (never one per tile), toward (leanX, leanY), the last arrow. Held at
+     * its target for HomeLayout.parallaxMs, then back to 0 (leanBack). Never moved on Ui.LEGACY.
+     */
+    private final Spring rowLean = new Spring(HomeLayout.NOVA.parallaxResponse, HomeLayout.NOVA.parallaxDamping, 0);
+    private float leanX, leanY;
+    private final Runnable leanBack = () -> {
+        rowLean.target = 0;
+        tilesDirty = true;
+        wake();
+    };
+    /** The look tileFocus' springs were made for (Nova's focus is quicker than Classic's). */
+    private HomeLayout springLay;
     private Paint rowWord, rowWordShade;
     /** How much of a Nova tile shows while the row slides (tiles past the five fade instead of being cut). */
     private float rowAlpha = 1;
@@ -811,6 +831,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         cancelReorder(true);
         if (recents != null) recents.closeNow();
         handler.removeCallbacks(holdStart);
+        handler.removeCallbacks(leanBack);
+        rowLean.snap(0);
         okHeld = holdArmed = false;
         closeMenu(true);
         Choreographer.getInstance().removeFrameCallback(this);
@@ -1057,7 +1079,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             // What was sized for the old layout goes before the new one is made: on Android 8+ a bitmap's pixels are
             // native memory, freed only when the GC gets to it, so the two looks' copies would stay side by side.
             int freed = releaseSized();
-            if (newLook) AppLog.w("home: look " + (lay.nova ? "nova" : "classic") + ", " + freed + " bitmaps released");
+            // Native memory in use (not what the allocator keeps): flat from one look change to the next means
+            // nothing of the previous look stayed behind (card 204's hunt for ~0.8 MB per round trip).
+            if (newLook) AppLog.w("home: look " + (lay.nova ? "nova" : "classic") + ", " + freed + " bitmaps released, "
+                    + (android.os.Debug.getNativeHeapAllocatedSize() >> 10) + " KB native in use");
         }
         laidOut = true;
         quotes = null;
@@ -1116,7 +1141,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         rowWordShade.setShadowLayer(2 * k, 0, 1 * k, 0x59000000);
         lWeather = Ui.text(Ui.medium, lay.text(34) * k, L_DIM);
         lClockQuote = Ui.numbers(Ui.medium, lay.text(28) * k, L_DIM);
-        lightGradient = tintShade = null;
+        if (gradientH != h) {   // they depend on the height only: a look change keeps them (one bitmap less to leave)
+            lightGradient = nightGradient = tintShade = null;
+            gradientH = h;
+        }
         buttonPaint = Ui.text(Ui.semibold, lay.text(29) * k, INK);
         capsuleText = Ui.numbers(Ui.medium, lay.text(29) * k, 0xF2FFFFFF);
         tipPaint = Ui.text(Ui.semibold, lay.text(25) * k, 0xF2FFFFFF);
@@ -1163,6 +1191,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         border.setStrokeWidth(2 * k);
         rim.setStyle(Paint.Style.STROKE);
         rim.setStrokeWidth(2.5f * k);
+        // Nova's two tile shadows (design/204: radius 13 and 37, 9 and 25 at 720p). Ui.LEGACY draws them from Shadows'
+        // nine-slice cache, which only reads the radius: no BlurMaskFilter there.
+        rowRestBlur = Math.max(1, Math.round(lay.restShadowBlur * k));
+        rowFocusBlur = Math.max(1, Math.round(lay.focusShadowBlur * k));
+        boolean blurs = lay.nova && !Ui.LEGACY;
+        rowRestShadow.setMaskFilter(blurs ? new BlurMaskFilter(rowRestBlur, BlurMaskFilter.Blur.NORMAL) : null);
+        rowFocusShadow.setMaskFilter(blurs ? new BlurMaskFilter(rowFocusBlur, BlurMaskFilter.Blur.NORMAL) : null);
         onPlaying();   // the line fits the new size; a title that came before the first layout bounces and is said now
     }
 
@@ -1176,6 +1211,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
         settleWhileSliding();
         boolean tilesMoving = step(tileFocus, dt);
+        if (lay.nova) tilesMoving |= rowLean.step(dt);
         boolean topReorderFrame = reorderTop && reorderAnim;
         if (reorderAnim) {
             boolean moving = stepReorder(dt, up);
@@ -1782,22 +1818,37 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         boolean same = list.size() == shelf.size();
         for (int i = 0; same && i < list.size(); i++) same = list.get(i).key.equals(shelf.get(i).key);
         shelf = list;
+        boolean laid = false;
         if (!same || tileFocus.length != list.size()) {
             tileFocus = new Spring[list.size()];
             tileSlide = new Spring[list.size()];
             tileRects = new RectF[list.size()];
             for (int i = 0; i < tileFocus.length; i++) {
-                tileFocus[i] = new Spring(0.34f, 0.74f, 0);
+                tileFocus[i] = new Spring(lay.focusResponse, lay.focusDamping, 0);
                 tileSlide[i] = new Spring(0.32f, 0.86f, 0);
                 tileRects[i] = new RectF();
             }
+            springLay = lay;
             shelfIndex = Math.min(shelfIndex, Math.max(0, list.size() - 1));
             retarget(true);
-            layoutShelf();
+            layoutShelf();   // Nova: layoutRow made the tiles for these items already
+            laid = true;
         }
-        if (lay.nova) makeRowTiles();   // new items (a reload), even with the same apps
+        if (lay.nova && !laid) makeRowTiles();   // new items (a reload), even with the same apps
         tilesDirty = true;
         platter.invalidate();
+    }
+
+    /** The focus springs at this look's response and damping, each where it was (a look change moves nothing). */
+    private void respring() {
+        if (springLay == lay) return;
+        springLay = lay;
+        for (int i = 0; i < tileFocus.length; i++) {
+            Spring was = tileFocus[i], now = new Spring(lay.focusResponse, lay.focusDamping, was.value);
+            now.target = was.target;
+            now.velocity = was.velocity;
+            tileFocus[i] = now;
+        }
     }
 
     /** Apps the shelf shows at once: Nova's five, or HomeApps' count (it scrolls for the rest). */
@@ -1806,12 +1857,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void layoutShelf() {
+        respring();
         if (lay.nova) {
             layoutRow();
             return;
         }
         rowTiles.clear();   // Nova's, after a look change
-        rowGlow = null;
+        rowSheen = null;
+        rowSheenPaint.setShader(null);
         int n = Math.min(shelf.size(), shelfVisible);
         float pad = SHELF_PAD * k, gap = TILE_GAP * k;
         float full = (lay.contentR - lay.margin - 2 * lay.shelfInset) * k;
@@ -1844,9 +1897,29 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         shelfFirst = Math.max(0, Math.min(Math.max(shelfFirst, shelfIndex - n + 1), Math.min(shelfIndex, shelf.size() - n)));
         placeRow();
         platterRect.set(Math.round(lay.margin * k), top, Math.round(lay.contentR * k), top + th);
-        rowGlow = new LinearGradient(0, -th / 2, 0, 0, 0x14FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
+        // Classic's gradients, made while it drew, would stay with Nova (and Nova's go in the other direction).
+        tileShaders = new LinearGradient[0];
+        tileGlow = null;
+        tileShaderH = 0;
+        float tw = Math.round(lay.rowTile * k);
+        rowRadius = Math.round(lay.tileRadius * k);
+        rowLift = Math.round(lay.focusLift * k);
+        rowRestY = Math.round(lay.restShadowY * k);
+        rowFocusY = Math.round(lay.focusShadowY * k);
+        rowSheenPx = Math.round(lay.parallaxSheen * k);
+        rowShadowPx = Math.round(lay.parallaxShadow * k);
+        rowRimW = Math.max(1, Math.round(lay.rimWidth * k * 2) / 2f);   // 1.5 px at 1080p, 1 at 720p
+        // The sheen: 135°, light from the top left, white sheenAlpha at the start of the tile's diagonal line and 0 at
+        // sheenStop of it (CSS's linear-gradient(135deg) over the tile); drawn at the resting size, one per tile size.
+        float half = (tw + th) * 0.70710677f / 2, d = 0.70710677f;
+        float x0 = -half * d, y0 = -half * d, len = 2 * half * lay.sheenStop;
+        rowSheen = new LinearGradient(x0, y0, x0 + len * d, y0 + len * d, Ui.alpha(0xFFFFFFFF, lay.sheenAlpha), 0x00FFFFFF,
+                Shader.TileMode.CLAMP);
+        rowSheenPaint.setShader(rowSheen);
         rowRim.setStyle(Paint.Style.STROKE);
         rowRim.setStrokeWidth(1);
+        rowFocusRim.setStyle(Paint.Style.STROKE);
+        rowFocusRim.setStrokeWidth(rowRimW);
         Symbols.warm(getContext(), "chevron_right", lay.chevron * k);
         releaseLeftLogos();
         makeRowTiles();
@@ -1869,6 +1942,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         rowTiles.clear();
         if (k == 0 || rowWord == null || tileRects.length == 0) return;   // before the first layout
         float bh = tileRects[0].height(), maxW = tileRects[0].width() * 0.8f;
+        long start = SystemClock.uptimeMillis();
+        int made = 0;
         for (HomeApps.Item it : shelf) {
             RowTile t = new RowTile();
             int[] style = TILE_STYLE.get(it.key);
@@ -1897,7 +1972,25 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
             t.shader = new LinearGradient(0, -bh / 2, 0, bh / 2, colors[0], colors[1], Shader.TileMode.CLAMP);
             rowTiles.put(it, t);
+            // Both sizes of the logo now, not at the first frame that shows it (review/203: a first pass along the
+            // row was slower, and native memory grew as it went).
+            if (t.word == null && it.logo != null) made += warmLogo(it, t.logoMode == 2 && it.logoDark != null);
         }
+        if (made > 0) AppLog.w("home: row logos " + made + " in " + (SystemClock.uptimeMillis() - start) + " ms");
+    }
+
+    /** The logo's resting and focused copies, made now if they aren't yet; returns how many were made. */
+    private int warmLogo(HomeApps.Item it, boolean dark) {
+        Bitmap src = dark ? it.logoDark : it.logo;
+        if (src == null) return 0;
+        int made = 0;
+        for (int rest = 0; rest < 2; rest++) {
+            Bitmap[] sized = crispLogos.get(src);
+            if (sized != null && sized[rest == 1 ? 0 : 1] != null) continue;
+            crispLogo(it, dark, rest == 1);
+            made++;
+        }
+        return made;
     }
 
     /**
@@ -2246,46 +2339,56 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     /**
-     * A Nova tile: the gradient edge to edge with the logo, or the app's name. Focus is today's (shadow and glow) at
-     * Nova's 1.10 until card 204; at night a 1 px rim keeps dark tiles apart from the dark sky.
+     * A Nova tile (design/204): the gradient edge to edge with the logo, or the app's name. Focused, it grows 10% and
+     * rises; its short resting shadow gives way (by alpha, from the same spring) to a long, deeper one, and a diagonal
+     * sheen and a thin rim come in. Both shadows are drawn at the resting size inside the scaled canvas, so each keeps
+     * one cached mask. The sheen and the focus shadow of the focused tile slide with rowLean (the parallax), the sheen
+     * by moving the gradient under a shape that stays put. At night a 1 px rim keeps dark tiles apart from the dark sky.
+     * Order: shadows, gradient, sheen, name or logo, rims.
      */
     private void drawRowTile(Canvas c, int i) {
         HomeApps.Item it = shelf.get(i);
         RowTile t = rowTiles.get(it);
         if (t == null) return;
-        float l = !reorderTop && i == liftIndex ? Math.max(0, moveLift.value) : 0;
+        float l = !reorderTop && i == liftIndex ? Math.max(0, moveLift.value) : 0, lc = Ui.clamp(l);
         float f = tileFocus[i].value, fc = Ui.clamp(f), s = 1 + lay.focusGrow * f + LIFT_GROW * l;
         RectF base = tileRects[i];
-        float bw = base.width(), bh = base.height(), r0 = lay.tileRadius * k;
-        float cx = base.centerX(), cy = base.centerY();
+        float bw = base.width(), bh = base.height(), r0 = rowRadius;
+        // It rises toward the viewer (as far again when lifted to be moved): the logo's cell rises with it.
+        float cx = base.centerX(), cy = base.centerY() - rowLift * (f + l);
         cell.set(cx - bw * s / 2, cy - bh * s / 2, cx + bw * s / 2, cy + bh * s / 2);
+        // The parallax: only the focused tile's, and never while it's being moved.
+        float lean = i == shelfIndex && l == 0 ? Math.min(1, rowLean.value) : 0;
         c.save();
         c.translate(cx, cy);
         c.scale(s, s);
-        tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
-        tmp.offset(0, (4 + 14 * f + 6 * l) * k);
-        shadowDeep.setColor(Ui.alpha(0xFF000000, (tone(0.14f, 0.3f) + tone(0.18f, 0.3f) * fc + 0.14f * Ui.clamp(l)) * rowAlpha));
-        shadows.draw(c, tmp, r0, DEEP_BLUR * k, shadowDeep);
-        tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
-        int alpha = Math.round(255 * rowAlpha);
-        tileFill.setShader(t.shader);
-        tileFill.setAlpha(alpha);
-        c.drawRoundRect(tmp, r0, r0, tileFill);
-        if (fc > 0.01f && rowGlow != null) {
-            tileFill.setShader(rowGlow);
-            tileFill.setAlpha(Math.round(255 * fc * rowAlpha));
-            c.drawRoundRect(tmp, r0, r0, tileFill);
+        float restA = tone(lay.restShadowDay, lay.restShadowNight) * (1 - fc) * rowAlpha;
+        float focusA = Ui.clamp(tone(lay.focusShadowDay, lay.focusShadowNight) * fc + 0.14f * lc) * rowAlpha;
+        if (restA > 0.004f) {
+            tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
+            tmp.offset(0, rowRestY);
+            rowRestShadow.setColor(Ui.alpha(0xFF000000, restA));
+            shadows.draw(c, tmp, r0, rowRestBlur, rowRestShadow);
         }
+        if (focusA > 0.004f) {   // on Ui.LEGACY too, only the focused tile and the one leaving draw it
+            tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
+            tmp.offset(leanX * rowShadowPx * lean, rowFocusY + leanY * rowShadowPx * lean);
+            rowFocusShadow.setColor(Ui.alpha(0xFF000000, focusA));
+            shadows.draw(c, tmp, r0, rowFocusBlur, rowFocusShadow);
+        }
+        tmp.set(-bw / 2, -bh / 2, bw / 2, bh / 2);
+        tileFill.setShader(t.shader);
+        tileFill.setAlpha(Math.round(255 * rowAlpha));
+        c.drawRoundRect(tmp, r0, r0, tileFill);
         tileFill.setShader(null);
         tileFill.setAlpha(255);
-        float night = dark();
-        if (night > 0.01f) {
-            // 1 px on screen at any scale, just inside the edge.
-            float px = 1 / s;
-            rowRim.setStrokeWidth(px);
-            rowRim.setColor(Ui.alpha(0xFFFFFFFF, 0.1f * night * rowAlpha));
-            tmp.inset(px / 2, px / 2);
-            c.drawRoundRect(tmp, r0 - px / 2, r0 - px / 2, rowRim);
+        if (fc > 0.01f && rowSheen != null) {
+            float ox = leanX * rowSheenPx * lean, oy = leanY * rowSheenPx * lean;
+            rowSheenPaint.setAlpha(Math.round(255 * fc * rowAlpha));
+            c.translate(ox, oy);
+            tmp.offset(-ox, -oy);
+            c.drawRoundRect(tmp, r0, r0, rowSheenPaint);
+            c.translate(-ox, -oy);
         }
         if (t.word != null) {
             Paint p = t.wordShade ? rowWordShade : rowWord;
@@ -2295,6 +2398,21 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         c.restore();
         if (t.word == null && it.logo != null) drawLogo(c, it, cell, s, t.logoMode);
+        // The rims, over the logo, on screen: 1 px at night, and the focus rim (1.5 px, 1 at 720p) just inside the edge.
+        float night = dark(), rimA = lay.rimAlpha * fc * rowAlpha, r = r0 * s;
+        if (night > 0.01f) {
+            rowRim.setColor(Ui.alpha(0xFFFFFFFF, 0.1f * night * rowAlpha));
+            tmp.set(cell);
+            tmp.inset(0.5f, 0.5f);
+            c.drawRoundRect(tmp, r - 0.5f, r - 0.5f, rowRim);
+        }
+        if (rimA > 0.004f) {
+            float half = rowRimW / 2;
+            rowFocusRim.setColor(Ui.alpha(0xFFFFFFFF, rimA));
+            tmp.set(cell);
+            tmp.inset(half, half);
+            c.drawRoundRect(tmp, r - half, r - half, rowFocusRim);
+        }
     }
 
     /**
@@ -3536,6 +3654,31 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void move(int dx, int dy) {
+        int fromZone = zone, fromIndex = shelfIndex;
+        boolean sheet = sheetOpen;
+        moveFocus(dx, dy);
+        // Nova's parallax (design/204 §3): along the row, or into it from above or below; at the row's ends, half.
+        if (sheet || sheetOpen || zone != Z_SHELF || shelf.isEmpty()) return;
+        if (fromZone != Z_SHELF) {
+            if (dy != 0) lean(0, dy, 1);
+        } else if (dx != 0) {
+            lean(dx, 0, shelfIndex != fromIndex ? 1 : 0.5f);
+        }
+    }
+
+    /** The sheen and the focus shadow lean toward (dx, dy) by `amount`, and spring back after parallaxMs. */
+    private void lean(int dx, int dy, float amount) {
+        if (Ui.LEGACY || !lay.nova || lay.parallaxMs == 0) return;
+        leanX = dx;
+        leanY = dy;
+        rowLean.target = amount;
+        handler.removeCallbacks(leanBack);
+        handler.postDelayed(leanBack, lay.parallaxMs);
+        tilesDirty = true;
+        wake();
+    }
+
+    private void moveFocus(int dx, int dy) {
         if (sheetOpen) {
             moveGrid(dx, dy);
             return;

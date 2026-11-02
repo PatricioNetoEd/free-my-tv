@@ -38,6 +38,22 @@ final class HomeLayout {
     final float logoInk, logoMaxW, logoMaxH;
     /** Nova's "more" arrows: size, centres from the screen's left (the right one mirrored) and centre line. */
     final float chevron, chevronCx, chevronCy;
+    /**
+     * Nova's focus (card 204, design/204): the focused tile rises focusLift; a short resting shadow (y, blur radius,
+     * alpha by day and at night) gives way, by alpha, to a long focus one; a diagonal sheen (white sheenAlpha fading out
+     * at sheenStop of the 135° line) and a rimWidth rim at rimAlpha come in. Classic: all 0 (drawShelfTile as always).
+     */
+    final float focusLift, restShadowY, restShadowBlur, restShadowDay, restShadowNight;
+    final float focusShadowY, focusShadowBlur, focusShadowDay, focusShadowNight;
+    final float sheenAlpha, sheenStop, rimWidth, rimAlpha;
+    /** The focus spring of the shelf's tiles (response, damping). */
+    final float focusResponse, focusDamping;
+    /**
+     * The parallax (not on Ui.LEGACY): the sheen and the focus shadow slide this far toward the last arrow and spring
+     * back, through one spring for the row (response, damping) held at its target for parallaxMs. 0: none (Classic).
+     */
+    final float parallaxSheen, parallaxShadow, parallaxResponse, parallaxDamping;
+    final long parallaxMs;
 
     private HomeLayout(boolean nova) {
         this.nova = nova;
@@ -73,6 +89,14 @@ final class HomeLayout {
             logoMaxW = 0.76f;
             logoMaxH = 0.58f;
             chevron = chevronCx = chevronCy = 0;
+            focusLift = restShadowY = restShadowBlur = restShadowDay = restShadowNight = 0;
+            focusShadowY = focusShadowBlur = focusShadowDay = focusShadowNight = 0;
+            sheenAlpha = sheenStop = rimWidth = rimAlpha = 0;
+            focusResponse = 0.34f;
+            focusDamping = 0.74f;
+            parallaxSheen = parallaxShadow = 0;
+            parallaxResponse = parallaxDamping = 1;
+            parallaxMs = 0;
         } else {
             margin = 96;
             contentR = 1824;
@@ -97,7 +121,7 @@ final class HomeLayout {
             shelfInset = 40;    // HomeView.SHELF_PAD
             minText = 24;
             // design/203: five 300 × 169 tiles span the safe width (5 × 300 + 4 × 57 = 1728), at the row's final height
-            // (the band of card 206 goes above it). Focused 1.10 (330 × 186): the interim focus until card 204.
+            // (the band of card 206 goes above it). Focused 1.10 (330 × 186), which keeps 42 px to the neighbour.
             platter = false;
             rowVisible = 5;
             rowTop = 820;
@@ -112,6 +136,27 @@ final class HomeLayout {
             chevron = 24;
             chevronCx = 66;    // 54 to 78; the right one 1842 to 1866
             chevronCy = 904;   // the tiles' middle until card 206 moves them over the row
+            // design/tokens-v2.json focus.card_204: CSS 0 6 16 and 0 26 44 as BlurMaskFilter radii ((σ - 0.5) / 0.57735).
+            focusLift = 6;
+            restShadowY = 6;
+            restShadowBlur = 13;
+            restShadowDay = 0.16f;
+            restShadowNight = 0.36f;
+            focusShadowY = 26;
+            focusShadowBlur = 37;
+            focusShadowDay = 0.38f;
+            focusShadowNight = 0.62f;
+            sheenAlpha = 0.2f;
+            sheenStop = 0.55f;
+            rimWidth = 1.5f;
+            rimAlpha = 0.22f;
+            focusResponse = 0.3f;
+            focusDamping = 0.78f;
+            parallaxSheen = 8;
+            parallaxShadow = 4;
+            parallaxResponse = 0.4f;
+            parallaxDamping = 0.7f;
+            parallaxMs = 160;
         }
     }
 
