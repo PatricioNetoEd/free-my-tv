@@ -121,6 +121,7 @@ public class SettingsActivity extends Activity {
 
     @Override protected void onDestroy() {
         if (view != null) view.stopKeyPage();
+        if (view != null) view.dismissProfileDialog();   // before the window goes: no "leaked window"
         if (alive != null && alive.get() == this) alive = null;
         super.onDestroy();
     }
@@ -159,6 +160,7 @@ public class SettingsActivity extends Activity {
             return;
         }
         AppLog.w("settings: closed behind the home screen");
+        if (view != null) view.dismissProfileDialog();   // as Cancel: nothing typed is saved
         finish();
     }
 
@@ -283,6 +285,8 @@ public class SettingsActivity extends Activity {
         private Paint diskFill, diskRim, diskInitial;
         /** The profile the Profile screen edits (Home Settings → Profiles → one of them). */
         private int profileEdit;
+        /** The name or delete dialog that's up, if any: dismissed when this screen closes (SettingsActivity.onDestroy). */
+        private AlertDialog profileDialog;
         private TextPaint notice, rowValueFit;
 
         private final Runnable poll = new Runnable() {
@@ -2247,7 +2251,7 @@ public class SettingsActivity extends Activity {
             if (focus < ids.size()) {
                 openProfile(ids.get(focus));
             } else {
-                Profiles.askName(activity, Ui.tr("Add profile"), null, name -> {
+                profileDialog = Profiles.askName(activity, Ui.tr("Add profile"), null, name -> {
                     int id = Profiles.create(getContext(), name);
                     if (id < 0) return;
                     Profiles.setActive(id);   // the home screen shows its shelf when it's back in front
@@ -2275,7 +2279,7 @@ public class SettingsActivity extends Activity {
                     break;
                 case PR_NAME:
                     final int id = profileEdit;
-                    Profiles.askName(activity, Ui.tr("profile|Name"), Profiles.name(id), name -> {
+                    profileDialog = Profiles.askName(activity, Ui.tr("profile|Name"), Profiles.name(id), name -> {
                         Profiles.rename(id, name);
                         invalidate();
                         spoken.focusMoved();
@@ -2321,6 +2325,13 @@ public class SettingsActivity extends Activity {
                     .setNegativeButton(Ui.tr("Cancel"), null)
                     .show();
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).requestFocus();   // one stray OK keeps it
+            profileDialog = dialog;
+        }
+
+        /** Closes the profile dialog that's up (as Cancel: nothing is saved). */
+        void dismissProfileDialog() {
+            if (profileDialog != null && profileDialog.isShowing()) profileDialog.dismiss();
+            profileDialog = null;
         }
 
         /** A profile's disk: its color, a faint rim and the white initial in the middle. */

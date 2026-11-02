@@ -254,9 +254,10 @@ final class Profiles {
 
     /**
      * Asks for a name with the TV's keyboard: up to 12 characters, OK only once it has a letter or a digit. `done`
-     * gets the cleaned name; Cancel or Back call nothing.
+     * gets the cleaned name; Cancel or Back call nothing. Returns the dialog, for the screen to dismiss it when it closes
+     * (nothing is saved then, as with Cancel).
      */
-    static void askName(Activity a, String title, String current, Named done) {
+    static AlertDialog askName(Activity a, String title, String current, Named done) {
         EditText field = new EditText(a);
         field.setSingleLine(true);
         field.setHint(Ui.tr("Profile name"));
@@ -290,6 +291,7 @@ final class Profiles {
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
             @Override public void afterTextChanged(Editable s) { ok.setEnabled(!clean(s.toString()).isEmpty()); }
         });
+        return dialog;
     }
 
     /** At most NAME_MAX code points (an emoji or a CJK character outside the BMP counts once). */
