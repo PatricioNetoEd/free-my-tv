@@ -492,7 +492,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
             boolean drive = false;
             try {
-                StorageManager sm = (StorageManager) getContext().getSystemService(Context.STORAGE_SERVICE);
+                StorageManager sm = (StorageManager) getContext().getApplicationContext().getSystemService(Context.STORAGE_SERVICE);
                 if (sm != null) {
                     for (StorageVolume v : sm.getStorageVolumes()) {
                         // Only a mounted one: #192's unmounted drive doesn't show.
@@ -505,7 +505,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             } catch (RuntimeException ignored) {
             }
             boolean btOn = bt, driveOn = drive;
-            handler.post(() -> setDevices(btOn, driveOn));
+            handler.post(() -> { if (!destroyed) setDevices(btOn, driveOn); });
         });
     }
 
@@ -543,8 +543,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             f.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
             f.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
             try {
-                if (Build.VERSION.SDK_INT >= 33) getContext().registerReceiver(deviceCallback, f, Context.RECEIVER_NOT_EXPORTED);
-                else getContext().registerReceiver(deviceCallback, f);
+                Context app = getContext().getApplicationContext();   // as the managers above: not the activity
+                if (Build.VERSION.SDK_INT >= 33) app.registerReceiver(deviceCallback, f, Context.RECEIVER_NOT_EXPORTED);
+                else app.registerReceiver(deviceCallback, f);
                 devicesRegistered = true;
             } catch (RuntimeException ignored) {
             }
@@ -559,8 +560,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             f.addAction(Intent.ACTION_MEDIA_REMOVED);
             f.addDataScheme("file");
             try {
-                if (Build.VERSION.SDK_INT >= 33) getContext().registerReceiver(mediaCallback, f, Context.RECEIVER_NOT_EXPORTED);
-                else getContext().registerReceiver(mediaCallback, f);
+                Context app = getContext().getApplicationContext();
+                if (Build.VERSION.SDK_INT >= 33) app.registerReceiver(mediaCallback, f, Context.RECEIVER_NOT_EXPORTED);
+                else app.registerReceiver(mediaCallback, f);
                 mediaRegistered = true;
             } catch (RuntimeException ignored) {
             }
@@ -579,14 +581,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             // Registered once per filter, so unregistered once per filter.
             if (devicesRegistered) {
                 try {
-                    getContext().unregisterReceiver(deviceCallback);
+                    getContext().getApplicationContext().unregisterReceiver(deviceCallback);
                 } catch (RuntimeException ignored) {
                 }
                 devicesRegistered = false;
             }
             if (mediaRegistered) {
                 try {
-                    getContext().unregisterReceiver(mediaCallback);
+                    getContext().getApplicationContext().unregisterReceiver(mediaCallback);
                 } catch (RuntimeException ignored) {
                 }
                 mediaRegistered = false;
@@ -615,15 +617,19 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         activity = a;
         data = HomeData.get(a);
         recs = Recs.get(a);
-        playing = new NowPlaying.Watch(a, this::onPlaying);
+        // The system services through the app's context, not the activity's: a manager made for the activity keeps it
+        // (ConnectivityManager's static instance up to Android 11; LauncherApps' and the media sessions' binder stubs
+        // until system_server lets go of them), so each recreate() left the previous home screen behind (#216).
+        Context app = a.getApplicationContext();
+        playing = new NowPlaying.Watch(app, this::onPlaying);
         click = new Click(a);
         shelfVisible = HomeApps.shelfVisible(a);
         ui = a.getSharedPreferences("home-ui", Context.MODE_PRIVATE);
-        tvInputs = (TvInputManager) a.getSystemService(Context.TV_INPUT_SERVICE);
-        connectivity = (ConnectivityManager) a.getSystemService(Context.CONNECTIVITY_SERVICE);
-        BluetoothManager bm = (BluetoothManager) a.getSystemService(Context.BLUETOOTH_SERVICE);
+        tvInputs = (TvInputManager) app.getSystemService(Context.TV_INPUT_SERVICE);
+        connectivity = (ConnectivityManager) app.getSystemService(Context.CONNECTIVITY_SERVICE);
+        BluetoothManager bm = (BluetoothManager) app.getSystemService(Context.BLUETOOTH_SERVICE);
         bluetooth = bm == null ? null : bm.getAdapter();
-        launcherApps = (LauncherApps) a.getSystemService(Context.LAUNCHER_APPS_SERVICE);
+        launcherApps = (LauncherApps) app.getSystemService(Context.LAUNCHER_APPS_SERVICE);
         try {
             if (launcherApps != null) launcherApps.registerCallback(packages, handler);
         } catch (RuntimeException e) {   // some projectors (Rockchip rk3566 HY300) ship without the launcherapps service
@@ -757,8 +763,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         stopStatus();
     }
 
+    /** destroy() ran: a callback that arrives later (LOADER, Photos, Recs, HomeData, ScreenBlur) leaves the view alone. */
+    private boolean destroyed;
+
     void destroy() {
         pause();
+        destroyed = true;
         try {
             if (launcherApps != null) launcherApps.unregisterCallback(packages);
         } catch (RuntimeException ignored) {
@@ -766,6 +776,12 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         click.release();
         watchArt.close();   // its thread is shared: nothing is left running for this view
         releaseSized();     // a new HomeView follows (new settings): this one's bitmaps go now, not at the next GC
+        scene.release();    // its glass and frost copies (the photos' pixels stay: Backdrop's, shared with the new view)
+        if (recents != null) {
+            recents.release();   // the blurred copy ScreenBlur made for it
+            recents = null;
+        }
+        bgFrom = bgTo = null;   // Recs' and Photos' Backdrops, which the new view draws too: let go, never recycled
     }
 
     /**
@@ -823,6 +839,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     @Override public void onData() {
+        if (destroyed) return;   // posted before this view stopped listening
         wake();
         updatePalette();
         checkNight(true);
@@ -832,6 +849,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     @Override public void onRecs() {
+        if (destroyed) return;
         wake();
         updatePicks();
     }
@@ -1782,6 +1800,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** What's playing changed (or stopped). */
     private void onPlaying() {
+        if (destroyed) return;
         fitPlaying();
         heroDirty = true;
         wake();
@@ -2163,6 +2182,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** A state or a name changed: the tiles are drawn again (and TalkBack reads the new state). */
     private void homeChanged() {
+        if (destroyed) return;
         // A cover shows once its class is read, and a garage door or a gate goes: then the tiles themselves change.
         List<HomeApps.Item> tiles = HomeAssistant.itemsNow(getContext());
         boolean same = tiles.size() == drawerItems.size() - drawerHome;
@@ -2705,7 +2725,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 newest = Math.max(newest, at);
             }
             if (newest > seen) ui.edit().putLong("seenNotice", newest).apply();
-            if (!fresh.isEmpty()) handler.post(() -> { for (String t : fresh) showToast(t); });
+            if (!fresh.isEmpty()) handler.post(() -> { if (!destroyed) for (String t : fresh) showToast(t); });
         });
     }
 
@@ -2735,6 +2755,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             final boolean allowed = WatchNext.allowed(c);
             final List<WatchNext.Item> w = mode.equals(Prefs.TOP_CONTINUE) ? WatchNext.load(c) : new ArrayList<>();
             handler.post(() -> {
+                if (destroyed) return;   // a newer home screen reads its own lists
                 // A provider/package refresh must not cancel a drag or undo a move that was just saved.
                 boolean keepOrder = reordering || pendingOrderSaves > 0 || orderAtLoad != orderRevision;
                 if (top != null && !keepOrder) setLightButtons(top);
@@ -3296,6 +3317,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }, k);
         }
         ScreenBlur.capture(activity, handler, blurred -> {
+            if (destroyed || recents == null) {   // never drawn: ScreenBlur's copy goes at once
+                if (blurred != null) blurred.recycle();
+                return;
+            }
             recents.setBackdrop(blurred);
             recents.open();
             recentLayer.setVisibility(VISIBLE);
@@ -3443,7 +3468,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 text = Ui.trf("Removed from the shelf: {app}", "app", it.label);
             } else {
                 if (shown >= max) {
-                    handler.post(() -> showToast(Ui.tr("The shelf is full. Make room in Free My TV › Shelf.")));
+                    handler.post(() -> { if (!destroyed) showToast(Ui.tr("The shelf is full. Make room in Free My TV › Shelf.")); });
                     return;
                 }
                 list.add(it.pkg);
@@ -3451,6 +3476,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
             Prefs.setShelf(list);   // here, so the next hold reads the new list
             handler.post(() -> {
+                if (destroyed) return;   // saved above; the new home screen reads it
                 shelfEdited = true;
                 showToast(text);
                 reload();
@@ -4123,7 +4149,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Your photo's background is ready (or new photos came in): draw it. */
     private final Runnable ownReady = () -> {
-        if (running) updatePicks();
+        if (running && !destroyed) updatePicks();
     };
 
     // MARK: - Continue watching (Settings > Top of the screen)

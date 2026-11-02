@@ -24,6 +24,8 @@ abstract class Recording {
     abstract void setTranslationX(float x);
     abstract void setTranslationY(float y);
     abstract void draw(Canvas c);
+    /** Drops what was recorded (the view that drew it is gone); a new recording starts over. */
+    abstract void discard();
 
     private static final class Node extends Recording {
         private final RenderNode node;
@@ -40,10 +42,11 @@ abstract class Recording {
         @Override void setTranslationX(float x) { node.setTranslationX(x); }
         @Override void setTranslationY(float y) { node.setTranslationY(y); }
         @Override void draw(Canvas c) { c.drawRenderNode(node); }
+        @Override void discard() { node.discardDisplayList(); }
     }
 
     private static final class Pic extends Recording {
-        private final Picture picture = new Picture();
+        private Picture picture = new Picture();
         private float alpha = 1, tx, ty;
         private int left, top, right, bottom;
 
@@ -52,6 +55,7 @@ abstract class Recording {
         }
 
         @Override void endRecording() { picture.endRecording(); }
+        @Override void discard() { picture = new Picture(); }
 
         @Override void setPosition(int l, int t, int r, int b) {
             left = l;

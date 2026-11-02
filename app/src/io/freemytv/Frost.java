@@ -13,7 +13,7 @@ import android.os.Build;
 final class Frost {
     static final int W = 48, H = 27;
     private final int[] pixels = new int[W * H];
-    private final Bitmap bitmap = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
+    private Bitmap bitmap = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888);
 
     /** Recomputes and returns a new shader (a BitmapShader keeps a copy of the bitmap as it was when created). */
     BitmapShader render(float t, float speed, float dim, float[] palette, float aspect) {
@@ -28,6 +28,13 @@ final class Frost {
         bitmap.setPixels(pixels, 0, W, 0, 0, W, H);
         BitmapShader shader = new BitmapShader(bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
         return filter(shader, BitmapShader.FILTER_MODE_LINEAR);
+    }
+
+    /** Hands its bitmap over to be recycled (Scene.release): render isn't called again after this. */
+    Bitmap release() {
+        Bitmap b = bitmap;
+        bitmap = null;
+        return b;
     }
 
     /** BitmapShader.setFilterMode is Android 13+; older ones filter through the Paint. */
