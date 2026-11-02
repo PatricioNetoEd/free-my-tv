@@ -2308,7 +2308,9 @@ public class SettingsActivity extends Activity {
         private void askDeleteProfile() {
             final int id = profileEdit;
             AlertDialog dialog = new AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                    .setTitle(Ui.trf("Delete the profile {name}? Its row goes away; the apps stay installed.", "name", Profiles.name(id)))
+                    // The question as the message: a title is cut at two lines, and in ru, de or el it's longer.
+                    .setTitle(Ui.tr("Delete profile"))
+                    .setMessage(Ui.trf("Delete the profile {name}? Its row goes away; the apps stay installed.", "name", Profiles.name(id)))
                     .setPositiveButton(Ui.tr("Delete"), (d, which) -> {
                         Profiles.delete(id);
                         openProfiles(Profiles.active());
