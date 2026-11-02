@@ -173,12 +173,15 @@ var Prefs = (function () {
     startTab: function () { return this.profileTab(active()); },
     /** '' (off) or '10': saved only, the picks' filter is card 214c's. */
     profileKids: function (id) { return pick('profile.' + id + '.kids', ''); },
-    /** The first letter or digit of the name, uppercased. */
+    /**
+     * The first letter or digit of the name, uppercased in the app's language, as on Android (Ui.locale()). Old TVs'
+     * toLocaleUpperCase takes no language, so Turkish's dotted and dotless i are done here: i → İ, ı → I.
+     */
     initial: function (id) {
-      var name = this.profileName(id);
+      var name = this.profileName(id), turkish = /^tr\b/i.test(I18N.lang || '');
       for (var i = 0; i < name.length; ) {
-        var c = codeAt(name, i);
-        if (wordCode(c[0])) return name.substr(i, c[1]).toUpperCase();
+        var c = codeAt(name, i), ch = name.substr(i, c[1]);
+        if (wordCode(c[0])) return turkish && ch === 'i' ? '\u0130' : turkish && ch === '\u0131' ? 'I' : ch.toUpperCase();
         i += c[1];
       }
       return '?';
