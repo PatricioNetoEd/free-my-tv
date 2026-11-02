@@ -287,6 +287,8 @@ public class SettingsActivity extends Activity {
         private int profileEdit;
         /** The name or delete dialog that's up, if any: dismissed when this screen closes (SettingsActivity.onDestroy). */
         private AlertDialog profileDialog;
+        /** A new profile's shelf is being read (off the UI thread): a second OK waits for it. */
+        private boolean creating;
         private TextPaint notice, rowValueFit;
 
         private final Runnable poll = new Runnable() {
@@ -2252,13 +2254,25 @@ public class SettingsActivity extends Activity {
                 openProfile(ids.get(focus));
             } else {
                 profileDialog = Profiles.askName(activity, Ui.tr("Add profile"), null, name -> {
-                    int id = Profiles.create(getContext(), name);
-                    if (id < 0) return;
-                    Profiles.setActive(id);   // the home screen shows its shelf when it's back in front
-                    openProfile(id);
-                    whyRows = null;
-                    invalidate();
-                    spoken.focusMoved();
+                    if (creating) return;
+                    creating = true;
+                    final Context c = getContext().getApplicationContext();
+                    final int from = Profiles.active();
+                    // The shelf to copy, resolved off the UI thread (the built-in list asks the PackageManager ~30 times).
+                    new Thread(() -> {
+                        final List<String> shelf = HomeApps.shelfPackages(c, from);
+                        handler.post(() -> {
+                            creating = false;
+                            if (Profiles.active() != from) return;   // can't happen from here; never copy another's
+                            int id = Profiles.create(name, shelf);
+                            if (id < 0) return;
+                            Profiles.setActive(id);   // the home screen shows its shelf when it's back in front
+                            openProfile(id);
+                            whyRows = null;
+                            invalidate();
+                            spoken.focusMoved();
+                        });
+                    }, "profile-shelf").start();
                 });
             }
             for (Spring sp : pop) sp.snap(0);

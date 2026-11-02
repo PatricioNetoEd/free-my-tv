@@ -186,9 +186,10 @@ final class Profiles {
      * A new profile named `typed`, with a copy of the current profile's resolved shelf (the built-in list when it was
      * never edited), its starting tab and the first color no profile uses. Not a kids profile; nothing hidden from
      * Continue Watching. Returns its id, or -1 (6 already, or a name without a letter or digit). The caller makes it the
-     * active one (owner, 2026-11-02).
+     * active one (owner, 2026-11-02). `shelf` is HomeApps.shelfPackages(c, active()), resolved off the UI thread (with
+     * the built-in list, ~30 PackageManager queries).
      */
-    static int create(Context c, String typed) {
+    static int create(String typed, List<String> shelf) {
         String name = clean(typed);
         List<Integer> ids = list();
         if (name.isEmpty() || ids.size() >= MAX) return -1;
@@ -201,7 +202,6 @@ final class Profiles {
         while (color < COLORS.length - 1 && taken[color]) color++;
         if (taken[color]) color = ids.size() % COLORS.length;   // all eight in use: can't happen with 6 at most
         int current = active();
-        List<String> shelf = HomeApps.shelfPackages(c, current);
         StringBuilder order = new StringBuilder();
         for (int used : ids) order.append(order.length() == 0 ? "" : ",").append(used);
         order.append(',').append(id);
