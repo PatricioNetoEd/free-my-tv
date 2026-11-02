@@ -66,3 +66,12 @@ Google TV / Android TV e LG/Samsung.
   travados do 1º foco em cada app na TCL e, se pesar, gerar no layout.
 - Seta da fileira no web em `top` 72,5 px (`web/home.js` ~659): arredondar.
 - `makeRowTiles` roda 2× quando entram apps novos (`HomeView.java` ~1721 e ~1775): deixar uma.
+
+## Herdado do teste do 203 na TV (review/203.md, aprovado pelo dono em 2026-11-02)
+
+- **Gerar os logos de foco no layout**, não no 1º onDraw: navegar a fileira inteira subiu +4,6 MB de native (uma vez)
+  e a 3ª rodada de M2 deu 1,24% janky.
+- **Resíduo de ~0,8 MB de native por ida e volta Clássica ↔ Nova** (N2 37,6 → N3 38,4 MB sem navegar): achar o que a
+  troca deixa para trás (RowTile/shaders, máscaras de `Shadows` em tamanhos novos, cópias do foco, etc.).
+- Protocolo M deste card: antes de medir, navegar a fileira inteira nas duas aparências (cache aquecido); depois 3
+  ciclos de troca sem navegar: a mediana não pode crescer > 1 MB entre ciclos.
