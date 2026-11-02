@@ -278,3 +278,9 @@ Google TV / Android TV (`:home`) e LG/Samsung (`web/`).
 6. At power-on = Live TV: OK num perfil troca e abre a TV ao vivo; Voltar fica com o último perfil na tela inicial;
    10 s sem tecla seguem com o último e abrem a TV ao vivo.
 7. LG/Samsung (Clássica): ícone como opção "Botão no topo" em Home Settings → Perfis, desligada por padrão.
+
+## Herdado do teste do 214a (review/214a.md, 2026-11-02)
+
+- Com a chave TMDB a troca de perfil deu mediana 317 ms (493 na 1ª) contra a meta de 300 ms; sem chave, ~235 ms.
+  Ver o que a troca refaz com as picks (reload do LOADER, Continuar assistindo, cards) e deixar ≤ 300 ms com a chave.
+- Medir as trocas gravando `adb logcat -s FreeMyTV` no Mac durante o teste (o buffer da TV perde linhas).

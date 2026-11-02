@@ -27,3 +27,8 @@ MemAvailable da TV com o Free My TV em frente: ~430 MB.
 - **M3 a quente:** confirmar `mResumedActivity` = `com.android.tv.settings/.MainSettings` antes; o Home Settings do
   Free My TV (`io.freemytv/.SettingsActivity`) é do próprio app.
 - **M4 web:** pendente; fazer no preview quando o protótipo do card 200 estiver pronto.
+
+## Complemento — 2026-11-02 (teste do 214a)
+
+Com a chave TMDB (picks ligadas), Clássica com 9 apps, depois de aquecer: `:home` ~84 MB (sem chave ~68 MB). As
+próximas medidas da fase devem dizer se há chave; a meta final (≤ 130 MB) vale com a chave.
