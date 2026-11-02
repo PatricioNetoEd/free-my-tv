@@ -2,7 +2,7 @@
 
 Risco normal (não toca `DEBLOAT`, `PROTECTED`, `Adb.java`, `Watchdog.java`, `HomeMode.java`, `ModeJob.java` nem o modo
 *Original*; só **lê** `HomeMode.noteHomeShown` e `HomeMode.state`, que o `HomeActivity` já chama hoje; nenhuma
-permissão, rede ou ADB novo) · Status: proposto · Fase 2 do Meu TV OS · Parte do card guarda-chuva
+permissão, rede ou ADB novo) · Status: aprovado pelo dono (2026-11-02) · Fase 2 do Meu TV OS · Parte do card guarda-chuva
 `plan/214-perfis-do-meu-tv-os.md` (decisões de 2026-11-01 e as do protótipo) · Depende de: **214a** (dados e troca no
 lugar), **208** (barra superior da Nova), **210** (folhas em vidro grosso) e, pela ordem da fase, **215**. Vem antes
 do **214c** (que põe o selo infantil no ícone e na folha) e do **211** (auditoria de acessibilidade, mouse e 720p).
@@ -266,3 +266,15 @@ Google TV / Android TV (`:home`) e LG/Samsung (`web/`).
 3. **Adicionar pela folha:** abre só o nome (por cima da tela inicial), cria com a cópia da fileira e a próxima cor
    livre, e a folha continua aberta com o foco no perfil novo (a cor se muda depois, em Home Settings). Ok, ou prefere
    que vá para Home Settings → Perfis?
+
+## Respostas do dono (2026-11-02)
+
+1. Aba inicial: **fixa**, escolhida na tela do perfil; o Home sempre volta para ela.
+2. Perfil recém-criado **já vira o ativo** (pela tela do perfil em Home Settings e pelo "+ Adicionar" da folha).
+3. "Perfil infantil" **escondido até o 214c** (o 214a não mostra a linha; o dado pode existir, sem UI).
+4. Home Settings → Perfis abre a **lista de perfis** (trocar, criar, renomear, cor, aba, apagar); a folha "Quem está
+   assistindo?" fica só no ícone e no início.
+5. "+ Adicionar" na folha pede **só o nome ali mesmo**, por cima da tela inicial; o perfil criado já vira o ativo.
+6. At power-on = Live TV: OK num perfil troca e abre a TV ao vivo; Voltar fica com o último perfil na tela inicial;
+   10 s sem tecla seguem com o último e abrem a TV ao vivo.
+7. LG/Samsung (Clássica): ícone como opção "Botão no topo" em Home Settings → Perfis, desligada por padrão.

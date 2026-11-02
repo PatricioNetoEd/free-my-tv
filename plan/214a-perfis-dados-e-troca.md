@@ -1,7 +1,7 @@
 # 214a · Perfis: dados, migração, troca no lugar e Home Settings → Perfis
 
 Risco normal (não toca `DEBLOAT`, `PROTECTED`, `Adb.java`, `Watchdog.java`, `HomeMode.java`, `ModeJob.java` nem o modo
-*Original*; nenhuma permissão nova, nenhuma chamada de rede nova, nada pelo ADB da TV) · Status: proposto · Fase 2 do
+*Original*; nenhuma permissão nova, nenhuma chamada de rede nova, nada pelo ADB da TV) · Status: aprovado pelo dono (2026-11-02) · Fase 2 do
 Meu TV OS · Parte do card guarda-chuva `plan/214-perfis-do-meu-tv-os.md` (aprovado em 2026-11-01; vale tudo o que está
 em "Decisões do dono") · Depende de: **202** e **216** mesclados, de preferência também o **203**. Vem antes do **214b**
 e do **214c**.
@@ -290,3 +290,15 @@ Regras:
    é que ela abra a **lista** (trocar e editar ali, no Android e no web), e a folha fique no ícone e no início (214b).
    Desenhar a folha também dentro de Home Settings duplicaria código e memória (outra activity). Ok?
 4. **Depois de criar:** o perfil novo fica só criado (o foco vai para a tela dele), ou já passa a ser o ativo?
+
+## Respostas do dono (2026-11-02)
+
+1. Aba inicial: **fixa**, escolhida na tela do perfil; o Home sempre volta para ela.
+2. Perfil recém-criado **já vira o ativo** (pela tela do perfil em Home Settings e pelo "+ Adicionar" da folha).
+3. "Perfil infantil" **escondido até o 214c** (o 214a não mostra a linha; o dado pode existir, sem UI).
+4. Home Settings → Perfis abre a **lista de perfis** (trocar, criar, renomear, cor, aba, apagar); a folha "Quem está
+   assistindo?" fica só no ícone e no início.
+5. "+ Adicionar" na folha pede **só o nome ali mesmo**, por cima da tela inicial; o perfil criado já vira o ativo.
+6. At power-on = Live TV: OK num perfil troca e abre a TV ao vivo; Voltar fica com o último perfil na tela inicial;
+   10 s sem tecla seguem com o último e abrem a TV ao vivo.
+7. LG/Samsung (Clássica): ícone como opção "Botão no topo" em Home Settings → Perfis, desligada por padrão.
