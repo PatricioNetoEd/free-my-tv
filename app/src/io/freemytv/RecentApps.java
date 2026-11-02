@@ -119,6 +119,19 @@ final class RecentApps {
         backdrop = blurred;
     }
 
+    /**
+     * The home screen is gone (HomeView.destroy): a load under way answers no one (generation), and the blurred copy,
+     * ScreenBlur's and so this screen's own, is recycled a second later, after any frame already recorded with it.
+     */
+    void release() {
+        open = false;
+        generation++;
+        cards.clear();
+        final Bitmap gone = backdrop;
+        backdrop = null;
+        if (gone != null) new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(gone::recycle, 1000);
+    }
+
     // MARK: - Data
 
     /** How many cards there are, and what TalkBack reads for one. */

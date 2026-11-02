@@ -64,6 +64,7 @@ public class HomeActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         resumed = true;
+        SettingsActivity.homeResumed(this);   // Home Settings left behind in its own task closes (#216)
         // TCL's Android 11 records the home activity as translucent (occludesParent=false) whatever its theme says:
         // Android then keeps the app just left visible, and home tasks are layered under all others, so that app stays
         // on screen over ours. Opaque again on every resume (setTranslucent is public from Android 11).
@@ -85,6 +86,7 @@ public class HomeActivity extends Activity {
 
     @Override protected void onPause() {
         resumed = false;
+        SettingsActivity.homePaused(this);
         if (home != null) home.pause();
         super.onPause();
     }

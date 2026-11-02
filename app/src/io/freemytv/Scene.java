@@ -9,6 +9,8 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.RuntimeShader;
 import android.graphics.Shader;
+import android.os.Handler;
+import android.os.Looper;
 
 /**
  * Background (aurora) and glass, using the shaders in Shaders. The aurora is drawn into a ¼-scale layer, scaled up,
@@ -54,6 +56,9 @@ final class Scene {
     private Bitmap softA, softB, softFrost;               // reused small bitmaps
     private BitmapShader softShaderA, softShaderB, softShaderFrost;   // remade after each setPixels (a shader keeps the pixels as they were)
     private float glassMix, offX, offY;
+    /** release() ran: nothing is drawn or made again (a late callback of a destroyed home screen can still call in). */
+    private boolean released;
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     Scene() {
         this(true);
@@ -85,6 +90,7 @@ final class Scene {
     }
 
     void setSize(int width, int height) {
+        if (released) return;
         w = Math.max(1, width);
         h = Math.max(1, height);
         lw = Math.max(1, Math.round(w / 4f));
@@ -107,6 +113,7 @@ final class Scene {
 
     /** speed: 1 on the home screen, less on the screensaver; dim: how much to darken (0 to 1). */
     void setMotion(float speed, float dim) {
+        if (released) return;
         this.speed = speed;
         baseDim = dim;
         push();
@@ -114,6 +121,7 @@ final class Scene {
 
     /** Call after changing `palette`. Bright palettes are dimmed a little so white text stays readable. */
     void applyPalette() {
+        if (released) return;
         push();
         if (aurora == null) fallback.setShader(Ui.gradient(h, palette.color(1), palette.color(0)));
     }
@@ -129,6 +137,7 @@ final class Scene {
 
     /** Moves the aurora to `seconds`: redraws the layer on the next draw, recomputes the glass's frosted aurora now. */
     void advance(float seconds) {
+        if (released) return;
         time = seconds;
         if (aurora == null) return;
         aurora.setFloatUniform("t", seconds);
@@ -152,6 +161,7 @@ final class Scene {
 
     /** Photo transition: both photos in the glass, blended by setGlassMix (0 = the first one). */
     void setGlassImages(int[] from, int[] to) {
+        if (released) return;
         imageGlass = true;
         glassMix = 0;
         if (liquid == null) {           // no AGSL (Android 8 to 12): the bitmaps path reads small soft copies instead
@@ -177,13 +187,14 @@ final class Scene {
     }
 
     void setGlassMix(float t) {
+        if (released) return;
         glassMix = Math.max(0, Math.min(1, t));
         if (liquid != null) liquid.setFloatUniform("mixB", glassMix);
     }
 
     /** The liquid glass goes back to the frosted aurora. */
     void clearGlass() {
-        if (!imageGlass) return;
+        if (!imageGlass || released) return;
         imageGlass = false;
         advance(time);
     }
@@ -234,7 +245,7 @@ final class Scene {
      */
     void liquid(Canvas c, RectF r, float radius, int tint, float tintAlpha, float lift, float band, float refraction,
                 float specular, float alpha) {
-        if (alpha <= 0.004f) return;
+        if (alpha <= 0.004f || released) return;
         if (liquid == null) {
             if (imageGlass && softShaderA != null) {
                 // Mapped by what the copy covers: 270 / 8 = 33.75 rows, of which the bitmap holds 33.
@@ -260,6 +271,7 @@ final class Scene {
 
     /** The glass now reads the blurred background image (Backdrop.FW × FH, ARGB). */
     void setFrost(int[] pixels) {
+        if (released) return;
         imageFrost = true;
         if (glass == null) {            // as above: a small soft copy for the bitmaps path (also mid-fade, every step)
             if (softPxFrost == null) softPxFrost = new int[SFW * SFH];
@@ -277,7 +289,7 @@ final class Scene {
 
     /** Back to the frosted aurora. */
     void clearFrost() {
-        if (!imageFrost) return;
+        if (!imageFrost || released) return;
         imageFrost = false;
         setFrostScale();
         advance(time);
@@ -290,11 +302,12 @@ final class Scene {
 
     /** The current blurred image (so the bottom drawer can blur the background), or null with the aurora. */
     Bitmap frostImage() {
-        return imageFrost ? frostImage : null;
+        return imageFrost && !released ? frostImage : null;
     }
 
     /** Offset (px) of the layer that will draw glass, if it was moved on screen without being redrawn. */
     void setOffset(float x, float y) {
+        if (released) return;
         offX = x;
         offY = y;
         if (glass != null) glass.setFloatUniform("offset", x, y);
@@ -308,6 +321,7 @@ final class Scene {
     }
 
     void drawBackground(Canvas c) {
+        if (released) return;
         if (aurora == null) {
             if (fallback.getShader() == null) applyPalette();
             c.drawRect(0, 0, w, h, fallback);
@@ -338,7 +352,7 @@ final class Scene {
 
     /** Same, with an opacity (0 to 1) for the whole glass. */
     void glass(Canvas c, RectF r, float radius, int tint, float tintAlpha, int glow, float glowAlpha, float lift, float body, float alpha) {
-        if (alpha <= 0.004f) return;
+        if (alpha <= 0.004f || released) return;
         if (glass == null) {
             if (imageFrost && softShaderFrost != null) {
                 bitmapGlass(c, r, radius, softShaderFrost, Backdrop.FW / (float) SOFT_FROST, Backdrop.FH / (float) SOFT_FROST, null, 0,
@@ -397,6 +411,29 @@ final class Scene {
             c.drawRoundRect(sheenRect, radius, radius, sheenPaint);
             c.restore();
         }
+    }
+
+    /**
+     * The home screen that owns it is gone (HomeView.destroy): the bitmaps it made go now rather than at the next GC.
+     * Only its own (the frost and glass copies and Frost's): the photos' pixels belong to Backdrop. Their fields are
+     * emptied first, and they're recycled a second later, after any frame already recorded with them.
+     */
+    void release() {
+        if (released) return;
+        released = true;
+        final Bitmap[] gone = {frostImage, glassA, glassB, softA, softB, softFrost, frost.release()};
+        frostImage = glassA = glassB = softA = softB = softFrost = null;
+        glassShaderA = softShaderA = softShaderB = softShaderFrost = null;
+        softPxA = softPxB = softPxFrost = null;
+        imageFrost = imageGlass = false;
+        auroraPaint.setShader(null);
+        glassPaint.setShader(null);
+        liquidPaint.setShader(null);
+        fallback.setShader(null);
+        softPaint.setShader(null);
+        aurora = glass = liquid = null;   // the shaders held the bitmaps as inputs
+        auroraNode.discard();
+        MAIN.postDelayed(() -> { for (Bitmap b : gone) if (b != null) b.recycle(); }, 1000);
     }
 
     private static int blend(int a, int b, float t) {
