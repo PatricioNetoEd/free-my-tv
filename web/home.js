@@ -624,9 +624,9 @@
   }
 
   /**
-   * Nova's row (design/203): five tiles from the margin, no glass (#platter only holds the arrows, at the screen's
-   * sides). Each tile is the focus shadow (.lift, shown by opacity) under the face (.art): only opacity and transform
-   * change when the focus moves.
+   * Nova's row (design/203, 204): five tiles from the margin, no glass (#platter only holds the arrows, at the screen's
+   * sides). Each tile is the focus shadow (.lift, shown by opacity) under the face (.art), which holds the sheen under
+   * the logo or name and the focus rim over them: only opacity and transform change when the focus moves.
    */
   function renderRow() {
     var n = Math.min(shelf.length, ROW_VISIBLE), tile = {w: ROW_TILE, h: ROW_TILE_H};
@@ -648,7 +648,10 @@
       t.style.width = ROW_TILE + 'px';
       t.style.height = ROW_TILE_H + 'px';
       el('div', 'lift', t);
-      face(shelf[i], el('div', 'art', t), wordFit(shelf[i].title, ROW_TILE, 40, 24), tile);
+      var art = el('div', 'art', t);
+      el('div', 'sheen', art);
+      face(shelf[i], art, wordFit(shelf[i].title, ROW_TILE, 40, 24), tile);
+      el('div', 'rim', art);
       hover(t, Z.SHELF, i);
     }
     // "More" arrows, 24 px, at x 54-78 and 1842-1866, on the tiles' middle (card 206 moves them over the row).
@@ -657,7 +660,7 @@
       var arrow = sym('chevron_right', platter, 24);
       arrow.className += a ? ' more' : ' more back';
       arrow.style.left = (a ? 1842 : 54) + 'px';
-      arrow.style.top = (ROW_TILE_H / 2 - 12) + 'px';
+      arrow.style.top = Math.floor(ROW_TILE_H / 2 - 12) + 'px';   // 72: centred at 904 in whole pixels
     }
     st.shelf = Math.min(st.shelf, Math.max(0, shelf.length - 1));
     placeTiles();
@@ -1666,7 +1669,33 @@
     holder.style.webkitTransition = holder.style.transition = '';
   }
 
+  /**
+   * Nova's parallax (design/204): the focused tile's sheen and shadow lean toward the arrow for 160 ms, then spring
+   * back (home.css's lean-* classes on #tiles). Half at the row's ends. Not with flat or lite, nor from the pointer.
+   */
+  var leanTimer = 0;
+  function lean(dx, dy, half) {
+    var root = document.documentElement;
+    if (!nova() || hasClass(root, 'flat') || hasClass(root, 'lite')) return;
+    var row = $('tiles'), dirs = ['lean-l', 'lean-r', 'lean-u', 'lean-d', 'lean-half'], i;
+    for (i = 0; i < dirs.length; i++) setClass(row, dirs[i], false);
+    setClass(row, dx < 0 ? 'lean-l' : dx > 0 ? 'lean-r' : dy < 0 ? 'lean-u' : 'lean-d', true);
+    setClass(row, 'lean-half', half);
+    clearTimeout(leanTimer);
+    leanTimer = setTimeout(function () {
+      for (var j = 0; j < dirs.length; j++) setClass(row, dirs[j], false);
+    }, 160);
+  }
+
   function move(dx, dy) {
+    var fromZone = st.zone, fromShelf = st.shelf;
+    moveFocus(dx, dy);
+    if (st.zone !== Z.SHELF || !shelf.length) return;
+    if (fromZone !== Z.SHELF) { if (dy) lean(0, dy, false); }
+    else if (dx) lean(dx, 0, st.shelf === fromShelf);
+  }
+
+  function moveFocus(dx, dy) {
     var tiles = $('tiles').children, cardNodes = $('cards').children;
     switch (st.zone) {
       case Z.SHELF:
