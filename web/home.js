@@ -1673,18 +1673,21 @@
    * Nova's parallax (design/204): the focused tile's sheen and shadow lean toward the arrow for 160 ms, then spring
    * back (home.css's lean-* classes on #tiles). Half at the row's ends. Not with flat or lite, nor from the pointer.
    */
-  var leanTimer = 0;
+  // One array and one callback for every arrow: nothing made per key press.
+  var leanTimer = 0, LEAN_CLASSES = ['lean-l', 'lean-r', 'lean-u', 'lean-d', 'lean-half'];
+  function leanClear() {
+    var row = $('tiles');
+    for (var i = 0; i < LEAN_CLASSES.length; i++) setClass(row, LEAN_CLASSES[i], false);
+  }
   function lean(dx, dy, half) {
     var root = document.documentElement;
     if (!nova() || hasClass(root, 'flat') || hasClass(root, 'lite')) return;
-    var row = $('tiles'), dirs = ['lean-l', 'lean-r', 'lean-u', 'lean-d', 'lean-half'], i;
-    for (i = 0; i < dirs.length; i++) setClass(row, dirs[i], false);
+    var row = $('tiles');
+    leanClear();
     setClass(row, dx < 0 ? 'lean-l' : dx > 0 ? 'lean-r' : dy < 0 ? 'lean-u' : 'lean-d', true);
     setClass(row, 'lean-half', half);
     clearTimeout(leanTimer);
-    leanTimer = setTimeout(function () {
-      for (var j = 0; j < dirs.length; j++) setClass(row, dirs[j], false);
-    }, 160);
+    leanTimer = setTimeout(leanClear, 160);
   }
 
   function move(dx, dy) {
