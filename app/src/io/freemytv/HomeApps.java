@@ -220,9 +220,14 @@ final class HomeApps {
         return null;
     }
 
-    /** The shelf's packages in order: the user's list (Settings > Shelf), or the built-in one. */
+    /** The active profile's shelf packages in order: the user's list (Settings > Shelf), or the built-in one. */
     static List<String> shelfPackages(Context c) {
-        List<String> custom = Prefs.shelf();
+        return shelfPackages(c, Profiles.active());
+    }
+
+    /** A profile's shelf packages (Profiles): the one a move started in, or the one a new profile copies. */
+    static List<String> shelfPackages(Context c, int profile) {
+        List<String> custom = Prefs.shelf(profile);
         if (custom != null) return custom;
         List<String> out = new ArrayList<>();
         Set<String> keys = new HashSet<>();

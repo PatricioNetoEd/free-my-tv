@@ -315,9 +315,12 @@ final class Prefs {
     static Set<String> watchOff() { return new HashSet<>(sp().getStringSet("watchOff", new HashSet<>())); }
     static void setWatchOff(Set<String> packages) { putQuietly("watchOff", packages); }
 
-    /** Single items hidden from Continue Watching (holding OK on a card), as WatchNext.hideKey. */
-    static Set<String> watchHidden() { return new HashSet<>(sp().getStringSet("watchHidden", new HashSet<>())); }
-    static void setWatchHidden(Set<String> keys) { putQuietly("watchHidden", keys); }
+    /** Single items hidden from Continue Watching (holding OK on a card), as WatchNext.hideKey: the active profile's. */
+    static Set<String> watchHidden() {
+        return new HashSet<>(sp().getStringSet("watchHidden" + Profiles.suffix(Profiles.active()), new HashSet<>()));
+    }
+
+    static void setWatchHidden(Set<String> keys) { putQuietly("watchHidden" + Profiles.suffix(Profiles.active()), keys); }
 
     /** Recent Apps: "off" (the default: Android manages memory on its own), "drawer" (a shortcut in the bottom drawer and the
      *  remote's app-switch key) or "home" (those, and pressing Home twice). The top button is its own choice (Top Buttons). */
@@ -412,9 +415,16 @@ final class Prefs {
 
     // MARK: - Shelf
 
-    /** Packages on the home shelf, in order; null until the user edits it (then the built-in list applies). */
+    /**
+     * Packages on the active profile's home shelf, in order; null until the user edits it (then the built-in list
+     * applies). The Main profile's is the `shelf` key every version used; the others' are `shelf.<id>` (Profiles).
+     */
     static List<String> shelf() {
-        String v = sp().getString("shelf", null);
+        return shelf(Profiles.active());
+    }
+
+    static List<String> shelf(int profile) {
+        String v = sp().getString("shelf" + Profiles.suffix(profile), null);
         if (v == null) return null;
         List<String> out = new ArrayList<>();
         for (String p : v.split(",")) if (!p.isEmpty()) out.add(p);
@@ -422,9 +432,12 @@ final class Prefs {
     }
 
     static void setShelf(List<String> packages) {
-        StringBuilder sb = new StringBuilder();
-        for (String p : packages) sb.append(sb.length() == 0 ? "" : ",").append(p);
-        put("shelf", sb.toString());
+        setShelf(Profiles.active(), packages);
+    }
+
+    /** A profile's shelf, by id: a move that started in one profile saves there even if another is active by then. */
+    static void setShelf(int profile, List<String> packages) {
+        put("shelf" + Profiles.suffix(profile), Profiles.join(packages));
     }
 
     // MARK: - Sleep timer
