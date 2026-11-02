@@ -3,7 +3,8 @@
  * Same limits as web/home.css, so it also proves the look fits old TVs: no CSS variables, grid or backdrop-filter, and
  * only transform and opacity animate (focus surfaces are separate elements whose opacity changes). Values come from
  * design/tokens-v2.json. Classes on #stage: night, drawer-open, sheet-open, flat, lite, no-key; card 203's cut: c203,
- * names, guides, no-picks (its rules are at the end, under "Card 203").
+ * names, guides, no-picks (its rules are at the end, under "Card 203"); card 204's: c204 (with c203) and legacy, and on
+ * #tiles the lean-* / bump-* classes of the parallax (under "Card 204", last).
  * Font: Inter, the app's own file (app/assets/fonts/InterVariable.ttf; web/ has no copy, tools/webapp.py packs it into
  * the LG and Samsung builds as fonts/). Nothing from the network: where the browser refuses a file:// font from a
  * parent folder (Firefox), the fallback stack draws.
@@ -257,7 +258,7 @@ svg { display: block; }
 }
 .face .word.shade { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
 .face .word { text-overflow: ellipsis; }
-.face .mark, .face .lbox, .face .glow { display: none; }
+.face .mark, .face .lbox, .face .glow, .face .rim { display: none; }
 .face .sheen {
   position: absolute; left: -10px; top: 0; right: -10px; bottom: 0; border-radius: 28px; opacity: 0;
   background: -webkit-linear-gradient(top, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 55%);
@@ -532,3 +533,68 @@ svg { display: block; }
 .guides .face .lbox { display: block; position: absolute; left: 42px; top: 42px; width: 216px; height: 85px; border: 1px dashed rgba(255, 159, 10, 0.95); box-sizing: border-box; }
 .c203 #clock { color: #1D1D1F; }
 .c203.night #clock { color: #F5F5F7; }
+
+/* MARK: - Card 204 (key 4, #card=204): 203's cut with the final focus. design/204-foco-elevacao-sombra-brilho.md,
+   tokens-v2.json focus.card_204. Over the c203 rules above (#stage has both classes), so these come last. */
+
+/* Focused: 1.10 and 6 px up (lite too, at once). */
+.c204 .tile.focus { -webkit-transform: translateY(-6px) scale(1.1); transform: translateY(-6px) scale(1.1); }
+.c204 .face .glow { display: none !important; }
+/* Rest shadow on the face, static; the focus shadow is its own element, only its opacity (and the parallax) moves. */
+.c204 .tile .face { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16); }
+.c204.night .tile .face { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.36), inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+.c204 .tile .shadow {
+  box-shadow: 0 26px 44px rgba(0, 0, 0, 0.38);
+  -webkit-transition: opacity 0.18s ease-out, -webkit-transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  transition: opacity 0.18s ease-out, transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.c204.night .tile .shadow { box-shadow: 0 26px 44px rgba(0, 0, 0, 0.62); }
+/* The sheen: light from the top left, 135 degrees, white 20% -> 0 at 55% of the tile (the box is 8 px larger on each
+   side for the parallax, so the stops are 3.2% and 54.7%); cut by the face's rounded corners. Under the logo. */
+.c204 .face .sheen {
+  display: block; left: -8px; top: -8px; right: -8px; bottom: -8px; border-radius: 0; box-shadow: none;
+  background: -webkit-linear-gradient(-45deg, rgba(255, 255, 255, 0.2) 3.2%, rgba(255, 255, 255, 0) 54.7%);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 3.2%, rgba(255, 255, 255, 0) 54.7%);
+}
+.c204 .face .mark, .c204 .face .word { z-index: 1; }
+/* The rim: 1.5 px inside, white 22%; it doesn't move. */
+.c204 .face .rim {
+  display: block; position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: 28px; z-index: 2;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.22); opacity: 0;
+  -webkit-transition: opacity 0.18s ease-out; transition: opacity 0.18s ease-out;
+}
+.c204 .tile.focus .rim { opacity: 1; }
+/* Layers only on the focused tile's moving parts. */
+.c204 .tile.focus .shadow, .c204 .tile.focus .sheen { will-change: opacity, transform; }
+
+/* Parallax: a class on the row for 160 ms; the transitions above bring it back (sheen 8 px, shadow 4; half at the ends). */
+.c204 .lean-r .tile.focus .sheen { -webkit-transform: translateX(8px); transform: translateX(8px); }
+.c204 .lean-l .tile.focus .sheen { -webkit-transform: translateX(-8px); transform: translateX(-8px); }
+.c204 .lean-d .tile.focus .sheen { -webkit-transform: translateY(8px); transform: translateY(8px); }
+.c204 .lean-u .tile.focus .sheen { -webkit-transform: translateY(-8px); transform: translateY(-8px); }
+.c204 .lean-r .tile.focus .shadow { -webkit-transform: translateX(4px); transform: translateX(4px); }
+.c204 .lean-l .tile.focus .shadow { -webkit-transform: translateX(-4px); transform: translateX(-4px); }
+.c204 .lean-d .tile.focus .shadow { -webkit-transform: translateY(4px); transform: translateY(4px); }
+.c204 .lean-u .tile.focus .shadow { -webkit-transform: translateY(-4px); transform: translateY(-4px); }
+.c204 .bump-r .tile.focus .sheen { -webkit-transform: translateX(4px); transform: translateX(4px); }
+.c204 .bump-l .tile.focus .sheen { -webkit-transform: translateX(-4px); transform: translateX(-4px); }
+.c204 .bump-r .tile.focus .shadow { -webkit-transform: translateX(2px); transform: translateX(2px); }
+.c204 .bump-l .tile.focus .shadow { -webkit-transform: translateX(-2px); transform: translateX(-2px); }
+
+/* Android Ui.LEGACY (E): the same focus, the sheen and the shadow still (on the TV the shadows come from Shadows' cache). */
+.legacy .face .sheen, .legacy .tile .shadow { -webkit-transform: none !important; transform: none !important; }
+.legacy .tile.focus .shadow, .legacy .tile.focus .sheen { will-change: auto; }
+/* flat: shadows static, the focus shadow, sheen and rim at once, no parallax, no extra layers. */
+.flat.c204 .tile .shadow, .flat.c204 .face .rim { -webkit-transition: none; transition: none; }
+.flat.c204 .tile .shadow { -webkit-transform: none !important; transform: none !important; }
+.flat.c204 .tile.focus .shadow, .flat.c204 .tile.focus .sheen { will-change: auto; }
+/* lite: no shadow, sheen or rim; the 3 px ring (rules above) and the lift, at once. */
+.lite.c204 .face .sheen, .lite.c204 .face .rim, .lite.c204 .tile .shadow { display: none; }
+
+/* Guides (G) in the 204 cut: the 3.5% action-safe area and the focused tile's box. */
+#guides .act, #guides .gfocus, #guides .glabel2 { display: none; }
+.c204 #guides .glabel { display: none; }
+.c204 #guides .glabel2 { display: block; position: absolute; left: 96px; top: 1044px; font-size: 24px; line-height: 28px; font-weight: 600; color: #FF9F0A; white-space: nowrap; }
+.c204 #guides .act { display: block; position: absolute; left: 67px; top: 38px; width: 1786px; height: 1004px; border: 1px dashed rgba(255, 159, 10, 0.7); box-sizing: border-box; }
+.c204 #guides .gfocus.on { display: block; position: absolute; top: 805.5px; width: 330px; height: 186px; border: 2px solid #FF9F0A; border-radius: 31px; box-sizing: border-box; }
+.c204.drawer-open #guides .gfocus { display: none; }

@@ -1,6 +1,6 @@
 # 204 · Foco tvOS: elevação, sombra suave e brilho
 
-Risco normal (não toca `DEBLOAT`, `PROTECTED`, `Adb.java`, `Watchdog.java` nem o modo *Original*) · Status: proposto ·
+Risco normal (não toca `DEBLOAT`, `PROTECTED`, `Adb.java`, `Watchdog.java` nem o modo *Original*) · Status: aprovado pelo dono (2026-11-02) ·
 Fase 2 · Depende de: 203
 
 ## Objetivo
@@ -75,3 +75,9 @@ Google TV / Android TV e LG/Samsung.
   troca deixa para trás (RowTile/shaders, máscaras de `Shadows` em tamanhos novos, cópias do foco, etc.).
 - Protocolo M deste card: antes de medir, navegar a fileira inteira nas duas aparências (cache aquecido); depois 3
   ciclos de troca sem navegar: a mediana não pode crescer > 1 MB entre ciclos.
+
+## Aprovação do dono (2026-11-02)
+
+Recorte do protótipo (`design/204-foco-elevacao-sombra-brilho.md`, `#card=204`) aprovado com os padrões do designer:
+escala 1,10; subida 6 px (4 a 720p) em todas as variantes; paralaxe de 8 px onde a plataforma aguenta (não em LEGACY),
+meia paralaxe nas pontas; brilho diagonal; cards de picks e Continuar assistindo como estão até o 206.

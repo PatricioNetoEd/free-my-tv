@@ -5,6 +5,8 @@
  * invented titles over CSS gradients. The speed test is simulated: nothing is downloaded.
  * Key 3 (or #card=203) shows only what card 203 ships (design/203-tiles-grandes.md): today's Nova (202: sky, top bar,
  * "Para você" and the picks cards) with the big tiles in their final place; no band, no TV info line, no profiles.
+ * Key 4 (or #card=204) is the same cut with card 204's final focus (design/204-foco-elevacao-sombra-brilho.md): lift,
+ * new shadows, the diagonal sheen and rim, and the parallax; E simulates Android's Ui.LEGACY (no parallax).
  */
 (function () {
   'use strict';
@@ -203,8 +205,11 @@
   // speed: the simulated network for the speed item (V): tested 2 h ago, never tested, the test fails, no network
   // card: 0 the whole Nova, 203 only what card 203 ships; art: 'logo' (stand-in for the lifted logo) or 'names' (every
   // tile as the no-logo fallback: Samsung without a bundled icon); guides: safe area, grid and logo boxes
-  var opt = {night: null, perf: 'normal', key: true, cont: true, hd: false, speed: 0, single: false, card: 0, art: 'logo', guides: false};
-  function only203() { return opt.card === 203; }
+  // legacy: Android's Ui.LEGACY (the owner's TCL) in the 204 cut: the same focus, its sheen and shadow without parallax
+  var opt = {night: null, perf: 'normal', key: true, cont: true, hd: false, speed: 0, single: false, card: 0, art: 'logo', guides: false, legacy: false};
+  /** The cut of card 203 (key 3) or 204 (key 4): today's Nova around the big tiles. */
+  function only203() { return opt.card === 203 || opt.card === 204; }
+  function only204() { return opt.card === 204; }
   var fav = [], others = [];
   var owner = null, items = [], followTimer = 0, followPending = false, lastDir = 0;
   var stage = $('stage');
@@ -573,6 +578,7 @@
     el('div', 'lbox', face);
     el('div', 'glow', face);
     el('div', 'sheen', face);
+    el('div', 'rim', face);
     return t;
   }
 
@@ -599,9 +605,24 @@
     setClass(document.querySelector('.chev.r'), 'on', first + n < fav.length);
   }
 
-  /** Parallax: the focused tile's sheen leans toward the last arrow, then springs back. */
-  function lean(dx) {
+  var LEANS = ['lean-l', 'lean-r', 'lean-u', 'lean-d', 'bump-l', 'bump-r'], leanTimer = 0;
+
+  /**
+   * Parallax: the focused tile's sheen leans toward the last arrow, then springs back. Card 204: a class on the row
+   * (one per zone, as Android's one spring per zone) for 160 ms moves the focused tile's sheen 8 px and its shadow 4 px
+   * (half at the row's ends, `bump`); none in flat, lite or LEGACY.
+   */
+  function lean(dx, dy, bump) {
     if (hasClass(stage, 'lite') || hasClass(stage, 'flat')) return;
+    if (only204()) {
+      if (opt.legacy) return;
+      var row = $('tiles'), i, cls = (bump ? 'bump-' : 'lean-') + (dx < 0 ? 'l' : dx > 0 ? 'r' : dy < 0 ? 'u' : 'd');
+      for (i = 0; i < LEANS.length; i++) setClass(row, LEANS[i], false);
+      setClass(row, cls, true);
+      clearTimeout(leanTimer);
+      leanTimer = setTimeout(function () { for (var j = 0; j < LEANS.length; j++) setClass(row, LEANS[j], false); }, 160);
+      return;
+    }
     var tile = $('tiles').children[st.row];
     if (!tile) return;
     var sheen = tile.querySelector('.sheen');
@@ -792,6 +813,10 @@
     list = $('tiles').children;
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.ROW && st.row === i);
     placeRow();
+    // Guides of the 204 cut: the focused tile's box (330 x 186, 6 px up), where the scale reaches.
+    var box = document.querySelector('#guides .gfocus');
+    setClass(box, 'on', only204() && st.zone === Z.ROW && fav.length > 0);
+    box.style.left = (96 + (st.row - first) * 357 - 15) + 'px';
     setClass(stage, 'band-focus', st.zone === Z.BAND);
     list = document.querySelectorAll('#today .card');
     for (i = 0; i < list.length; i++) setClass(list[i], 'focus', st.zone === Z.CARDS && st.card === i);
@@ -818,14 +843,17 @@
   function minTop() { return opt.key ? 0 : SPEED; }
 
   function move(dx, dy) {
-    if (only203() && move203(dx, dy)) { updateFocus(); return; }
+    var from = st.zone;
+    if (only203() && move203(dx, dy)) { updateFocus(); enterRow(from, dy); return; }
     switch (st.zone) {
       case Z.ROW:
         if (dx) {
           var to = Math.max(0, Math.min(fav.length - 1, st.row + dx));
-          if (to !== st.row) { st.row = to; lastDir = dx; followSoon(); }
+          var end = to === st.row;
+          if (!end) { st.row = to; lastDir = dx; followSoon(); }
           updateFocus();
-          lean(dx);
+          if (!end || !only204()) lean(dx, 0, false);
+          else lean(dx, 0, true);   // card 204: at the row's ends, half a lean (the remote answered; the row ends)
           return;
         }
         if (dy > 0) { openDrawer(); break; }
@@ -862,6 +890,12 @@
         break;
     }
     updateFocus();
+    enterRow(from, dy);
+  }
+
+  /** Card 204: coming into the row from above (down) or from the drawer (up), the light leans that way and back. */
+  function enterRow(from, dy) {
+    if (only204() && dy && from !== Z.ROW && st.zone === Z.ROW) lean(0, dy, false);
   }
 
   // MARK: - Card 203 cut: today's Nova (202) around the big tiles
@@ -1035,9 +1069,13 @@
     setClass(stage, 'no-key', !opt.key);
     setClass(stage, 'hd', opt.hd);
     setClass(stage, 'c203', only203());
+    setClass(stage, 'c204', only204());
+    setClass(stage, 'legacy', only204() && opt.legacy);
     setClass(stage, 'names', opt.art === 'names');
     setClass(stage, 'guides', opt.guides);
-    $('b203').textContent = 'Recorte: ' + (only203() ? 'só o card 203' : 'Nova completa') + ' (3)';
+    $('b203').textContent = 'Recorte 203: ' + (opt.card === 203 ? 'sim' : 'não') + ' (3)';
+    $('b204').textContent = 'Recorte 204: ' + (only204() ? 'sim' : 'não') + ' (4)';
+    $('bLegacy').textContent = 'Android LEGACY: ' + (opt.legacy ? 'sim' : 'não') + ' (E)';
     $('bArt').textContent = 'Arte: ' + (opt.art === 'names' ? 'só nome' : 'logo') + ' (T)';
     $('bGuide').textContent = 'Guias: ' + (opt.guides ? 'sim' : 'não') + ' (G)';
     $('bNight').textContent = (isNight() ? 'Noite' : 'Dia') + ' (N)';
@@ -1053,7 +1091,13 @@
 
   var actions = {
     n: function () { opt.night = !isNight(); applyLook(); },
-    l: function () { opt.perf = opt.perf === 'normal' ? 'flat' : opt.perf === 'flat' ? 'lite' : 'normal'; applyLook(); },
+    l: function () { opt.perf = opt.perf === 'normal' ? 'flat' : opt.perf === 'flat' ? 'lite' : 'normal'; opt.legacy = false; applyLook(); },
+    e: function () {
+      if (!only204()) { toast('Android LEGACY: só no recorte 204 (tecla 4)'); return; }
+      opt.legacy = !opt.legacy;
+      if (opt.legacy) opt.perf = 'normal';   // LEGACY is Android's path: the web's flat and lite don't apply
+      applyLook();
+    },
     k: function () {
       opt.key = !opt.key;
       if (!opt.key && st.zone === Z.TOP && st.top < SPEED) st.top = SPEED;
@@ -1090,21 +1134,26 @@
       st.row = 0; setup(); applyLook();
     },
     o: function () { if (outside203('Perfis ao ligar')) return; fullStart(); },
-    3: function () {
-      opt.card = only203() ? 0 : 203;
-      if (st.zone === Z.PROFILES) closeProfiles(Z.ROW);
-      if (st.zone === Z.BAND || st.zone === Z.CARDS) st.zone = Z.ROW;
-      if (st.zone === Z.TOP && (st.top === SPEED || st.top === PROFILE_BUTTON)) st.top = FIRST_BUTTON;
-      applyLook(); followNow(); updateFocus();
-    },
+    3: function () { cut(opt.card === 203 ? 0 : 203); },
+    4: function () { cut(opt.card === 204 ? 0 : 204); },
     t: function () { opt.art = opt.art === 'logo' ? 'names' : 'logo'; applyLook(); },
     g: function () { opt.guides = !opt.guides; applyLook(); }
   };
 
-  /** In the card 203 cut, what other cards bring stays out (a note instead). */
+  /** Shows the cut of card 203 or 204 (or, with 0, the whole Nova). */
+  function cut(card) {
+    opt.card = card;
+    if (card !== 204) opt.legacy = false;
+    if (st.zone === Z.PROFILES) closeProfiles(Z.ROW);
+    if (st.zone === Z.BAND || st.zone === Z.CARDS) st.zone = Z.ROW;
+    if (st.zone === Z.TOP && (st.top === SPEED || st.top === PROFILE_BUTTON)) st.top = FIRST_BUTTON;
+    applyLook(); followNow(); updateFocus();
+  }
+
+  /** In the card 203 or 204 cut, what other cards bring stays out (a note instead). */
   function outside203(what) {
     if (!only203()) return false;
-    toast(what + ': fora do recorte 203 (tecla 3 volta à Nova completa)');
+    toast(what + ': fora do recorte ' + opt.card + ' (a tecla ' + (opt.card - 200) + ' volta à Nova completa)');
     return true;
   }
 
@@ -1143,6 +1192,7 @@
   window.addEventListener('load', tickClock);   // Inter changes the clock's width once it loads
   bind('bNight', 'n'); bind('bPerf', 'l'); bind('bKey', 'k'); bind('bApps', 'a'); bind('bCont', 'c'); bind('b720', 'r'); bind('bProf', 'p');
   bind('bSpeed', 'v'); bind('bAlone', 'u'); bind('bStart', 'o'); bind('b203', '3'); bind('bArt', 't'); bind('bGuide', 'g');
+  bind('b204', '4'); bind('bLegacy', 'e');
   var chevs = document.querySelectorAll('.chev');
   glyph('left', 24, chevs[0]);
   glyph('right', 24, chevs[1]);
@@ -1151,6 +1201,7 @@
    * &start=1&keys=rrru (keys: l r u d = arrows, o = OK, b = Back, p = the profiles sheet; apps= sets Ana's count;
    * speed= 0 tested, 1 never, 2 the test fails, 3 no network; single=1 only Principal; start=1 a full start).
    * Card 203: card=203 (only what 203 ships), art=names (every tile as the no-logo fallback), guides=1, apps=3|8|12.
+   * Card 204: card=204 (203's cut with the final focus), legacy=1 (Android's Ui.LEGACY: no parallax).
    */
   function fromHash() {
     var parts = location.hash.replace(/^#/, '').split('&'), keys = '';
@@ -1163,7 +1214,8 @@
       else if (kv[0] === 'cont') opt.cont = v !== '0';
       else if (kv[0] === 'hd') opt.hd = v === '1';
       else if (kv[0] === 'apps' && (COUNTS.indexOf(+v) >= 0 || COUNTS_203.indexOf(+v) >= 0)) PROFILES[0].count = +v;
-      else if (kv[0] === 'card') opt.card = v === '203' ? 203 : 0;
+      else if (kv[0] === 'card') opt.card = v === '203' ? 203 : v === '204' ? 204 : 0;
+      else if (kv[0] === 'legacy') opt.legacy = v === '1';
       else if (kv[0] === 'art') opt.art = v === 'names' ? 'names' : 'logo';
       else if (kv[0] === 'guides') opt.guides = v === '1';
       else if (kv[0] === 'speed' && NETS[+v]) setNet(+v);
@@ -1191,6 +1243,7 @@
   var start = false;
   setNet(0);
   var keys = fromHash();
+  if (opt.legacy) opt.perf = 'normal';   // LEGACY is Android's path: flat and lite are the web's
   renderTop();
   renderDrawer();
   applyLook();

@@ -181,6 +181,40 @@
       "web":         ".sheen element: opacity and translateX animate",
       "web_flat":    "sheen at once, no parallax",
       "web_lite":    "no sheen: focus = scale 1.10 + white 3 px ring (box-shadow none; an inner border on .face), brightness by the ring"
+    },
+    "card_204": {
+      "$note": "design/204-foco-elevacao-sombra-brilho.md: the final Nova focus of the app row (card 204). Where it differs from the notes above (sheen direction, Android blur radii, parallax timing), this wins. Classic unchanged.",
+      "scale": 1.1,
+      "scale_why": "unchanged from 203: focused 330x186 reaches x=81/1839 (inside the 3.5% action-safe, 67 px), 42 px to the neighbour, and 203's focus logos (238x93) stay valid; 1.12/1.15 squeeze the gap and remake the logos",
+      "lift_px": { "1080p": 6, "720p": 4, "rule": "round(6*k); the logo's cell moves with it" },
+      "shadow_rest":  { "css": [0, 6, 16],  "android_blur_radius": 13, "alpha_day": 0.16, "alpha_night": 0.36, "css_720p": [0, 4, 11],  "android_blur_radius_720p": 9 },
+      "shadow_focus": { "css": [0, 26, 44], "android_blur_radius": 37, "alpha_day": 0.38, "alpha_night": 0.62, "css_720p": [0, 17, 29], "android_blur_radius_720p": 25 },
+      "shadow_crossfade": "rest alpha * (1 - f), focus alpha * f, both drawn at the resting size inside the scaled canvas (one Shadows mask each); LEGACY: only the focused tile and the one leaving draw the focus shadow",
+      "blur_conversion": "CSS blur = 2 sigma; BlurMaskFilter radius = (sigma - 0.5) / 0.57735 (Skia)",
+      "sheen": {
+        "css": "linear-gradient(135deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 55%) over the tile",
+        "css_box_plus_8": "the .sheen box is 8 px larger on each side: stops at 3.2% and 54.7%; -webkit-linear-gradient angle -45deg",
+        "alpha_at_center": 0.018,
+        "why": "a vertical gradient shifted sideways looks the same: the left/right parallax would not show",
+        "under": "the logo and the name (drawn after it)"
+      },
+      "rim": { "width_px": 1.5, "width_720p_px": 1, "alpha": 0.22, "night_rest_rim": "stays (1 px, 0.10)" },
+      "parallax": {
+        "sheen_px": 8, "shadow_px": 4, "px_720p": [5, 3], "target_ms": 160, "spring": [0.4, 0.7],
+        "css": "transform 320ms cubic-bezier(0.2, 0.9, 0.3, 1.2)",
+        "how": "one spring per zone (the row) and a direction (dx, dy): target 1 for 160 ms, then 0 (peak 0.9 at ~170 ms, settled ~540 ms)",
+        "when": "left/right moving the focus; down from the cards or the top bar, or up from the drawer, into the row; at the row's ends half (0.5); none from the mouse or while reordering",
+        "paths": { "android13": true, "android12_3gb": true, "legacy": false, "web": true, "web_flat": false, "web_lite": false }
+      },
+      "springs": { "focus": [0.3, 0.78], "focus_classic_unchanged": [0.34, 0.74], "glow": "alpha = clamp(focus spring): no extra spring per tile", "web_focus": "transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1.15)", "web_glow": "opacity 180ms ease-out" },
+      "neighbours": "still, full opacity; the focused tile is drawn last; its shadow adds ~1.5% dark at 42 px, invisible",
+      "reorder": "as 203 (+0.08 scale, 1.5 deg wiggle), lift 12 in all, focus shadow alpha +0.14, no parallax",
+      "web_layers": "will-change only on the focused .tile, its .lift and its .sheen; check rounded clipping of .sheen on webOS 3/4 (fallback: no own layer, no parallax there)",
+      "lite": "scale 1.10 and lift at once, 3 px white ring, no shadow, sheen or rim; night 1 px border",
+      "flat": "shadows static, focus shadow and sheen show at once, no parallax",
+      "budget": { "pss_limit_mb": 8, "pss_card_target_mb": 3, "pss_expected_mb": 0.3, "janky_points_vs_203": 1.5, "janky_abs_percent": 10, "p95_ms": 26, "look_cycle_growth_mb": 1, "baseline": "203 and 204 measured the same day on the TCL, both with the TMDB key, after the picks' photos finished (review/214a)" },
+      "focus_logos": "made at layout (makeRowTiles, once per layout) for every app of the profile, never in onDraw; log 'home: row logos N in X ms'; over 50 ms on the TCL: LOADER with the profile generation",
+      "not_in_204": "band and arrows at y=770 (206), band follows app (207), top bar (208), glass (209), drawer/All Apps/menus (210), reduce-motion and a11y pass (211), picks/Continue cards (206 removes them from Nova)"
     }
   },
 
